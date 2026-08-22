@@ -20,8 +20,16 @@ echo Installing/updating dependencies...
 pip install -r requirements.txt -q
 echo.
 
+:: Check if this folder is a Git repository; if not, initialize and link it automatically!
+if not exist .git (
+    echo Initializing Git repository for updates...
+    git init
+    git remote add origin https://github.com/katt-dev/Katt-Music.git
+    git branch -M main
+)
+
 echo Checking for updates...
-git pull origin main
+git pull origin main --allow-unrelated-histories
 echo.
 
 echo Launching browser in 3 seconds...
