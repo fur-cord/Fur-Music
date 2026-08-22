@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Katt-Music</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎧</text></svg>">
+    <link rel="stylesheet" href="/static/style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div id="app-background" class="bg-layer"></div>
+    <div class="overlay-layer"></div>
+
+    <button id="btn-import-open" class="btn-import">
+        <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+        Import Playlist
+    </button>
+
+    <div id="import-modal" class="modal-overlay" style="display: none;">
+        <div class="glass-panel modal-content">
+            <h3>Import YouTube Playlist</h3>
+            <p>Paste a public or unlisted playlist URL below. Playback will begin as soon as the first track finishes downloading.</p>
+            <input type="text" id="import-url" class="glass-input" placeholder="https://youtube.com/playlist?list=...">
+            <div class="modal-actions">
+                <button id="btn-import-cancel" class="btn-text">Cancel</button>
+                <button id="btn-import-submit" class="btn-glow">Start Sync</button>
+            </div>
+        </div>
+    </div>
+    <div id="app-background" class="bg-layer"></div>
+    <div class="overlay-layer"></div>
+
+    <div class="container">
+        <div class="glass-panel main-player">
+            <div class="artwork-wrapper">
+                <img id="artwork" src="" alt="Album Art">
+            </div>
+            
+            <div class="song-info">
+                <h1 id="title">Loading Library...</h1>
+                <h2 id="artist">Katt-Music</h2>
+            </div>
+
+            <div class="progress-section">
+                <span id="time-current">0:00</span>
+                <div class="progress-bar-bg" id="progress-container">
+                    <div class="progress-bar-fill" id="progress-fill"></div>
+                </div>
+                <span id="time-total">0:00</span>
+            </div>
+
+            <div class="controls-wrapper">
+                <div class="side-controls left"></div>
+                <div class="main-controls">
+                    <button class="btn" id="btn-prev">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+                    </button>
+                    <button class="btn btn-play" id="btn-play">
+                        <svg id="icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                        <svg id="icon-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                    </button>
+                    <button class="btn" id="btn-next">
+                        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                    </button>
+                </div>
+                <div class="side-controls right">
+                    <button class="btn btn-small" id="btn-mute">
+                        <svg id="icon-vol" viewBox="0 0 24 24" fill="currentColor"><path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/></svg>
+                    </button>
+                    <input type="range" id="vol-slider" min="0" max="1" step="0.01" value="1">
+                </div>
+            </div>
+        </div>
+
+        <div class="glass-panel queue-section">
+            <h3>Next in Queue</h3>
+            <div id="queue-list" class="queue-list"></div>
+        </div>
+
+        <div class="glass-panel video-section">
+            <div class="video-wrapper">
+                <div id="yt-player"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script src="/static/script.js"></script>
+</body>
+</html>
