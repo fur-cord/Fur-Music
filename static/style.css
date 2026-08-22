@@ -187,3 +187,12 @@ input[type=range]::-moz-range-thumb {
     padding: 10px 20px; border-radius: 8px; cursor: pointer; font-family: 'Inter', sans-serif; transition: 0.2s;
 }
 .btn-glow:hover { background: rgba(255,255,255,0.2); box-shadow: 0 0 15px rgba(255,255,255,0.3); }
+
+body::-webkit-scrollbar {
+  display: none;
+}
+
+body {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
