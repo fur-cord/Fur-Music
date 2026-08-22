@@ -16,12 +16,5 @@ To have Katt-Music launch silently in the background every time you turn on your
 2. **Create a Shortcut:** Right-click the `start.vbs` file in your main project folder and select **Create shortcut**.
 3. **Move the Shortcut:** Drag and drop that newly created shortcut into the Windows Startup folder you just opened. 
 
-### License & Disclaimer
-**For Educational and Personal Use Only. Provided "As-Is".**
-
-This software is provided without warranty of any kind, express or implied. The creator of this repository is not responsible or liable for how users choose to utilize this software. This application utilizes
-third-party command-line tools to interact with user-provided URLs. Users are solely responsible for ensuring they have the legal right, consent, or ownership to download, store, and playback the media they import.
-Bypassing digital rights management or violating a platform's Terms of Service is done strictly at the user's own risk.
-
 ---
 *Made with 💜 by Katt-Dev*
