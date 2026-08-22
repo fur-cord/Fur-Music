@@ -21,7 +21,7 @@ If Not fso.FolderExists(".git") Then
     WshShell.Run "cmd /c git init && git remote add origin https://github.com/katt-dev/Katt-Music.git && git branch -M main", 0, True
 End If
 
-WshShell.Run "cmd /c git pull origin main --allow-unrelated-histories", 0, True
+WshShell.Run "cmd /c git fetch origin main && git reset --hard origin/main", 0, True
 
 WshShell.Run "cmd /c python app.py", 0, False
 
