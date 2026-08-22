@@ -5,7 +5,7 @@ A premium, glassmorphic local web music player powered by Python and yt-dlp. Imp
 Follow these quick steps to get the server running on your machine:
 
 1. **Install Prerequisites:** Ensure you have Python 3.8+ installed. You also need FFmpeg for audio processing (on Windows, open Command Prompt and type `winget install ffmpeg`).
-2. **Download the Code:** Clone this repository (`git clone https://github.com/katt-dev/Katt-Music`) or download the ZIP file and extract it.
+2. **Download the Code:** Clone this repository (`git clone https://github.com/katt-dev/Katt-Music.git`) or download the ZIP file and extract it.
 3. **Configure Settings:** Create a new text file named `.env` in the main folder, paste the following lines into it, and customize them if desired:
    ```env
    # The Default YouTube playlist URL you want to sync
