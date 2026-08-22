@@ -20,7 +20,6 @@ echo Installing/updating dependencies...
 pip install -r requirements.txt -q
 echo.
 
-:: Check if this folder is a Git repository; if not, initialize and link it automatically!
 if not exist .git (
     echo Initializing Git repository for updates...
     git init
@@ -29,7 +28,8 @@ if not exist .git (
 )
 
 echo Checking for updates...
-git pull origin main --allow-unrelated-histories
+git fetch origin main
+git reset --hard origin/main
 echo.
 
 echo Launching browser in 3 seconds...
