@@ -9,7 +9,7 @@ Follow these quick steps to get the server running on your machine:
 3. **Configure Settings:** Create a new text file named `.env` in the main folder, paste the following lines into it, and customize them if desired:
    ```env
    # The Default YouTube playlist URL you want to sync
-   # YOUTUBE_PLAYLIST_URL=[https://www.youtube.com/playlist?list=YOUR_PLAYLIST_HERE](https://www.youtube.com/playlist?list=YOUR_PLAYLIST_HERE) :3
+   # YOUTUBE_PLAYLIST_URL=https://www.youtube.com/playlist?list=YOUR_PLAYLIST_HERE :3
    # PORT=8000
 
 ### Run on PC Startup
