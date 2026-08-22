@@ -16,6 +16,10 @@ if "%CLEAR_CACHE_ON_STARTUP%"=="1" (
     echo.
 )
 
+echo Installing/updating dependencies...
+pip install -r requirements.txt -q
+echo.
+
 echo Checking for updates...
 git pull origin main
 echo.
