@@ -3,6 +3,11 @@ let currentIndex = 0;
 let audio = new Audio();
 let ytPlayer = null;
 
+// New state variables for Shuffle & Repeat
+let isShuffle = false;
+let repeatMode = 0; // 0: Off, 1: Repeat All, 2: Repeat One
+let shuffleHistory = [];
+
 const elTitle = document.getElementById('title');
 const elArtist = document.getElementById('artist');
 const elArtwork = document.getElementById('artwork');
@@ -15,6 +20,12 @@ const elQueue = document.getElementById('queue-list');
 
 const iconPlay = document.getElementById('icon-play');
 const iconPause = document.getElementById('icon-pause');
+
+// New button selectors for Shuffle & Repeat
+const btnRepeat = document.getElementById('btn-repeat');
+const iconRepeat = document.getElementById('icon-repeat');
+const iconRepeatOne = document.getElementById('icon-repeat-one');
+const btnShuffle = document.getElementById('btn-shuffle');
 
 const modal = document.getElementById('import-modal');
 const inputUrl = document.getElementById('import-url');
@@ -81,18 +92,40 @@ function togglePlay() {
     }
 }
 
-function nextSong() {
+// Updated nextSong logic to support Shuffle and Repeat Off
+function nextSong(isAuto = false) {
     if (library.length === 0) return;
-    currentIndex = (currentIndex + 1) % library.length;
+
+    shuffleHistory.push(currentIndex); // Save history for the prev button
+
+    if (isShuffle) {
+        let nextIdx = Math.floor(Math.random() * library.length);
+        if (library.length > 1 && nextIdx === currentIndex) {
+            nextIdx = (nextIdx + 1) % library.length; // Prevent playing the same song twice naturally
+        }
+        currentIndex = nextIdx;
+    } else {
+        // If repeat is OFF (0) and we reached the last song naturally, stop playing.
+        if (isAuto === true && repeatMode === 0 && currentIndex === library.length - 1) {
+            return; 
+        }
+        currentIndex = (currentIndex + 1) % library.length;
+    }
     loadSong(currentIndex);
 }
 
+// Updated prevSong logic to backtrack through shuffle history correctly
 function prevSong() {
     if (library.length === 0) return;
     if (audio.currentTime > 3) {
         audio.currentTime = 0;
+        if(ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(0);
     } else {
-        currentIndex = (currentIndex - 1 + library.length) % library.length;
+        if (isShuffle && shuffleHistory.length > 0) {
+            currentIndex = shuffleHistory.pop(); // Go back to the genuinely previous random song
+        } else {
+            currentIndex = (currentIndex - 1 + library.length) % library.length;
+        }
         loadSong(currentIndex);
     }
 }
@@ -122,7 +155,17 @@ audio.addEventListener('timeupdate', () => {
     }
 });
 
-audio.addEventListener('ended', nextSong);
+// Updated ended listener to support Repeat One
+audio.addEventListener('ended', () => {
+    if (repeatMode === 2) { 
+        // Repeat One Mode
+        audio.currentTime = 0;
+        audio.play();
+        if(ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(0);
+    } else {
+        nextSong(true); // 'true' tells nextSong it was triggered automatically
+    }
+});
 
 elProgressBox.addEventListener('click', (e) => {
     if (library.length === 0) return;
@@ -131,6 +174,31 @@ elProgressBox.addEventListener('click', (e) => {
     const ratio = clickX / width;
     audio.currentTime = ratio * audio.duration;
     if(ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(audio.currentTime);
+});
+
+// Shuffle Button Listener
+btnShuffle.addEventListener('click', () => {
+    isShuffle = !isShuffle;
+    btnShuffle.classList.toggle('active-control', isShuffle);
+});
+
+// Repeat Button Listener
+btnRepeat.addEventListener('click', () => {
+    repeatMode = (repeatMode + 1) % 3; // Cycles 0 -> 1 -> 2 -> 0
+    
+    if (repeatMode === 0) {
+        btnRepeat.classList.remove('active-control');
+        iconRepeat.style.display = 'block';
+        iconRepeatOne.style.display = 'none';
+    } else if (repeatMode === 1) {
+        btnRepeat.classList.add('active-control');
+        iconRepeat.style.display = 'block';
+        iconRepeatOne.style.display = 'none';
+    } else if (repeatMode === 2) {
+        btnRepeat.classList.add('active-control');
+        iconRepeat.style.display = 'none';
+        iconRepeatOne.style.display = 'block'; // Shows the little "1" inside the arrows
+    }
 });
 
 document.getElementById('btn-play').addEventListener('click', togglePlay);
