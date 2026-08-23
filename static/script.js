@@ -3,9 +3,8 @@ let currentIndex = 0;
 let audio = new Audio();
 let ytPlayer = null;
 
-// New state variables for Shuffle & Repeat
 let isShuffle = false;
-let repeatMode = 0; // 0: Off, 1: Repeat All, 2: Repeat One
+let repeatMode = 0;
 let shuffleHistory = [];
 
 const elTitle = document.getElementById('title');
@@ -92,20 +91,18 @@ function togglePlay() {
     }
 }
 
-// Updated nextSong logic to support Shuffle and Repeat Off
 function nextSong(isAuto = false) {
     if (library.length === 0) return;
 
-    shuffleHistory.push(currentIndex); // Save history for the prev button
+    shuffleHistory.push(currentIndex);
 
     if (isShuffle) {
         let nextIdx = Math.floor(Math.random() * library.length);
         if (library.length > 1 && nextIdx === currentIndex) {
-            nextIdx = (nextIdx + 1) % library.length; // Prevent playing the same song twice naturally
+            nextIdx = (nextIdx + 1) % library.length;
         }
         currentIndex = nextIdx;
     } else {
-        // If repeat is OFF (0) and we reached the last song naturally, stop playing.
         if (isAuto === true && repeatMode === 0 && currentIndex === library.length - 1) {
             return; 
         }
@@ -114,7 +111,6 @@ function nextSong(isAuto = false) {
     loadSong(currentIndex);
 }
 
-// Updated prevSong logic to backtrack through shuffle history correctly
 function prevSong() {
     if (library.length === 0) return;
     if (audio.currentTime > 3) {
@@ -122,7 +118,7 @@ function prevSong() {
         if(ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(0);
     } else {
         if (isShuffle && shuffleHistory.length > 0) {
-            currentIndex = shuffleHistory.pop(); // Go back to the genuinely previous random song
+            currentIndex = shuffleHistory.pop();
         } else {
             currentIndex = (currentIndex - 1 + library.length) % library.length;
         }
@@ -155,7 +151,6 @@ audio.addEventListener('timeupdate', () => {
     }
 });
 
-// Updated ended listener to support Repeat One
 audio.addEventListener('ended', () => {
     if (repeatMode === 2) { 
         // Repeat One Mode
@@ -163,7 +158,7 @@ audio.addEventListener('ended', () => {
         audio.play();
         if(ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(0);
     } else {
-        nextSong(true); // 'true' tells nextSong it was triggered automatically
+        nextSong(true);
     }
 });
 
@@ -176,15 +171,13 @@ elProgressBox.addEventListener('click', (e) => {
     if(ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(audio.currentTime);
 });
 
-// Shuffle Button Listener
 btnShuffle.addEventListener('click', () => {
     isShuffle = !isShuffle;
     btnShuffle.classList.toggle('active-control', isShuffle);
 });
 
-// Repeat Button Listener
 btnRepeat.addEventListener('click', () => {
-    repeatMode = (repeatMode + 1) % 3; // Cycles 0 -> 1 -> 2 -> 0
+    repeatMode = (repeatMode + 1) % 3;
     
     if (repeatMode === 0) {
         btnRepeat.classList.remove('active-control');
@@ -197,7 +190,7 @@ btnRepeat.addEventListener('click', () => {
     } else if (repeatMode === 2) {
         btnRepeat.classList.add('active-control');
         iconRepeat.style.display = 'none';
-        iconRepeatOne.style.display = 'block'; // Shows the little "1" inside the arrows
+        iconRepeatOne.style.display = 'block';
     }
 });
 
