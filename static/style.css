@@ -148,8 +148,10 @@ input[type=range]::-moz-range-thumb {
 
 /* Video */
 .video-section { padding: 15px; }
-.video-wrapper { width: 100%; aspect-ratio: 16/9; border-radius: 16px; overflow: hidden; box-shadow: 0 5px 20px rgba(0,0,0,0.4); }
-#yt-player { width: 100%; height: 100%; pointer-events: none; }
+.video-wrapper { width: 100%; aspect-ratio: 16/9; border-radius: 16px; overflow: hidden; box-shadow: 0 5px 20px rgba(0,0,0,0.4); position: relative; }
+#video-player { width: 100%; height: 100%; display: block; object-fit: contain; background: #09090a; }
+.video-fallback { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(18, 18, 20, 0.9); color: white; font-size: 0.95rem; text-decoration: underline; }
+.video-fallback[hidden] { display: none; }
 
 .btn-import {
     position: fixed; top: 30px; left: 30px; z-index: 100;
