@@ -1,7 +1,13 @@
 let library = [];
 let currentIndex = 0;
 let audio = new Audio();
-let ytPlayer = null;
+const videoPlayer = document.getElementById('video-player');
+
+function syncVideoPlayer() {
+    if (Math.abs(videoPlayer.currentTime - audio.currentTime) > 0.5) {
+        videoPlayer.currentTime = audio.currentTime;
+    }
+}
 
 let isShuffle = false;
 let repeatMode = 0;
@@ -16,11 +22,11 @@ const elTimeTot = document.getElementById('time-total');
 const elProgressFill = document.getElementById('progress-fill');
 const elProgressBox = document.getElementById('progress-container');
 const elQueue = document.getElementById('queue-list');
+const elVideoFallback = document.getElementById('video-fallback');
 
 const iconPlay = document.getElementById('icon-play');
 const iconPause = document.getElementById('icon-pause');
 
-// New button selectors for Shuffle & Repeat
 const btnRepeat = document.getElementById('btn-repeat');
 const iconRepeat = document.getElementById('icon-repeat');
 const iconRepeatOne = document.getElementById('icon-repeat-one');
@@ -60,6 +66,10 @@ function loadSong(index, autoPlay = true) {
     if (library.length === 0) return;
     
     const song = library[index];
+    elVideoFallback.href = `https://www.youtube.com/watch?v=${encodeURIComponent(song.id)}`;
+    elVideoFallback.hidden = true;
+    videoPlayer.src = `/video/${encodeURIComponent(song.id)}`;
+    videoPlayer.load();
     audio.src = `/audio/${song.id}`;
     
     elTitle.innerText = song.title;
@@ -73,11 +83,6 @@ function loadSong(index, autoPlay = true) {
     localStorage.setItem('katt_id', song.id);
 
     if(autoPlay) audio.play();
-    
-    if(ytPlayer && ytPlayer.loadVideoById) {
-        ytPlayer.loadVideoById(song.id);
-        if(!autoPlay) setTimeout(() => ytPlayer.pauseVideo(), 500);
-    }
     
     renderQueue();
 }
@@ -94,12 +99,12 @@ function togglePlay() {
 function nextSong(isAuto = false) {
     if (library.length === 0) return;
 
-    shuffleHistory.push(currentIndex);
+    shuffleHistory.push(currentIndex); 
 
     if (isShuffle) {
         let nextIdx = Math.floor(Math.random() * library.length);
         if (library.length > 1 && nextIdx === currentIndex) {
-            nextIdx = (nextIdx + 1) % library.length;
+            nextIdx = (nextIdx + 1) % library.length; 
         }
         currentIndex = nextIdx;
     } else {
@@ -118,7 +123,7 @@ function prevSong() {
         if(ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(0);
     } else {
         if (isShuffle && shuffleHistory.length > 0) {
-            currentIndex = shuffleHistory.pop();
+            currentIndex = shuffleHistory.pop(); // Go back to the genuinely previous random song
         } else {
             currentIndex = (currentIndex - 1 + library.length) % library.length;
         }
@@ -129,13 +134,13 @@ function prevSong() {
 audio.addEventListener('play', () => {
     iconPlay.style.display = 'none';
     iconPause.style.display = 'block';
-    if(ytPlayer && ytPlayer.playVideo) ytPlayer.playVideo();
+    videoPlayer.play().catch(() => {});
 });
 
 audio.addEventListener('pause', () => {
     iconPlay.style.display = 'block';
     iconPause.style.display = 'none';
-    if(ytPlayer && ytPlayer.pauseVideo) ytPlayer.pauseVideo();
+    videoPlayer.pause();
 });
 
 audio.addEventListener('timeupdate', () => {
@@ -145,6 +150,7 @@ audio.addEventListener('timeupdate', () => {
     elTimeCur.innerText = formatTime(cur);
     elTimeTot.innerText = formatTime(tot);
     elProgressFill.style.width = tot ? `${(cur / tot) * 100}%` : '0%';
+    syncVideoPlayer();
     
     if(Math.floor(cur) % 5 === 0) {
         localStorage.setItem('katt_time', cur);
@@ -156,7 +162,7 @@ audio.addEventListener('ended', () => {
         // Repeat One Mode
         audio.currentTime = 0;
         audio.play();
-        if(ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(0);
+        videoPlayer.currentTime = 0;
     } else {
         nextSong(true);
     }
@@ -168,7 +174,7 @@ elProgressBox.addEventListener('click', (e) => {
     const clickX = e.offsetX;
     const ratio = clickX / width;
     audio.currentTime = ratio * audio.duration;
-    if(ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(audio.currentTime);
+    videoPlayer.currentTime = audio.currentTime;
 });
 
 btnShuffle.addEventListener('click', () => {
@@ -177,7 +183,7 @@ btnShuffle.addEventListener('click', () => {
 });
 
 btnRepeat.addEventListener('click', () => {
-    repeatMode = (repeatMode + 1) % 3;
+    repeatMode = (repeatMode + 1) % 3; // Cycles 0 -> 1 -> 2 -> 0
     
     if (repeatMode === 0) {
         btnRepeat.classList.remove('active-control');
@@ -190,7 +196,7 @@ btnRepeat.addEventListener('click', () => {
     } else if (repeatMode === 2) {
         btnRepeat.classList.add('active-control');
         iconRepeat.style.display = 'none';
-        iconRepeatOne.style.display = 'block';
+        iconRepeatOne.style.display = 'block'; // Shows the little "1" inside the arrows
     }
 });
 
@@ -242,24 +248,13 @@ function formatTime(seconds) {
     return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-function onYouTubeIframeAPIReady() {
-    ytPlayer = new YT.Player('yt-player', {
-        playerVars: { 'playsinline': 1, 'controls': 0, 'disablekb': 1, 'fs': 0, 'modestbranding': 1, 'rel': 0 },
-        events: {
-            'onReady': (event) => {
-                event.target.mute(); 
-                if(library.length > 0) {
-                    ytPlayer.loadVideoById(library[currentIndex].id);
-                    setTimeout(() => ytPlayer.pauseVideo(), 300);
-                }
-            },
-            'onStateChange': (event) => {
-                if (event.data === YT.PlayerState.BUFFERING) { audio.pause(); }
-                if (event.data === YT.PlayerState.PLAYING && !audio.paused) { /* Synced */ }
-            }
-        }
-    });
-}
+videoPlayer.addEventListener('loadeddata', () => {
+    elVideoFallback.hidden = true;
+    syncVideoPlayer();
+});
+videoPlayer.addEventListener('error', () => {
+    elVideoFallback.hidden = false;
+});
 
 if (btnImportOpen) btnImportOpen.onclick = () => modal.style.display = 'flex';
 if (btnImportCancel) btnImportCancel.onclick = () => modal.style.display = 'none';
