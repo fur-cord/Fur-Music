@@ -23,6 +23,21 @@ if os.path.exists(LIB_FILE):
         except:
             library_data = []
 
+def download_video(video_id):
+    video_path = os.path.join(CACHE_DIR, f'{video_id}.mp4')
+    if os.path.exists(video_path):
+        return
+
+    video_opts = {
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]',
+        'outtmpl': video_path,
+        'merge_output_format': 'mp4',
+        'quiet': True,
+        'no_warnings': True
+    }
+    with yt_dlp.YoutubeDL(video_opts) as ydl_video:
+        ydl_video.download([video_id])
+
 def sync_playlist_task(playlist_url):
     global library_data, is_syncing
     is_syncing = True
@@ -45,6 +60,10 @@ def sync_playlist_task(playlist_url):
         vid = entry.get('id')
         
         if any(item.get('id') == vid for item in library_data):
+            try:
+                download_video(vid)
+            except Exception as e:
+                print(f"Failed to download video {vid}: {e}")
             continue
 
         print(f"Downloading: {entry.get('title')}...")
@@ -73,6 +92,8 @@ def sync_playlist_task(playlist_url):
                 library_data.append(item_data)
                 with open(LIB_FILE, 'w') as f:
                     json.dump(library_data, f, indent=4)
+
+            download_video(vid)
                     
         except Exception as e:
             print(f"Failed to download {vid}: {e}")
@@ -108,6 +129,13 @@ def get_audio(video_id):
     path = os.path.join(CACHE_DIR, f"{video_id}.mp3")
     if os.path.exists(path):
         return send_file(path, mimetype="audio/mpeg")
+    return "Not found", 404
+
+@app.route('/video/<video_id>')
+def get_video(video_id):
+    path = os.path.join(CACHE_DIR, f"{video_id}.mp4")
+    if os.path.exists(path):
+        return send_file(path, mimetype="video/mp4")
     return "Not found", 404
 
 if __name__ == '__main__':
