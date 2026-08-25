@@ -1,12 +1,87 @@
 let library = [];
 let currentIndex = 0;
 let audio = new Audio();
-const videoPlayer = document.getElementById('video-player');
+const audioModeKey = 'katt_background_mode';
 
-function syncVideoPlayer() {
-    if (Math.abs(videoPlayer.currentTime - audio.currentTime) > 0.5) {
+const videoPlayer = document.getElementById('video-player');
+const backgroundVideoLayer = document.getElementById('background-video-layer');
+const videoWrapper = document.querySelector('.video-wrapper');
+const elBg = document.getElementById('app-background');
+const elBgAlt = document.getElementById('app-background-alt');
+let activeBg = elBg;
+
+function syncVideoPlayer(force = false) {
+    if (!videoPlayer || !videoPlayer.src || Number.isNaN(audio.currentTime)) return;
+    const diff = Math.abs(videoPlayer.currentTime - audio.currentTime);
+    if (videoPlayer.readyState >= 2 && !videoPlayer.seeking && (force || diff > 0.75)) {
         videoPlayer.currentTime = audio.currentTime;
     }
+
+    if (audio.paused) {
+        videoPlayer.pause();
+    } else {
+        videoPlayer.play().catch(() => {});
+    }
+}
+
+function moveVideoToBackground() {
+    if (!backgroundVideoLayer || !videoWrapper || !videoPlayer) return;
+    if (videoPlayer.parentElement === backgroundVideoLayer) return;
+    backgroundVideoLayer.appendChild(videoPlayer);
+}
+
+function moveVideoToInline() {
+    if (!backgroundVideoLayer || !videoWrapper || !videoPlayer) return;
+    if (videoPlayer.parentElement === videoWrapper) return;
+    videoWrapper.appendChild(videoPlayer);
+}
+
+function getBackgroundMode() {
+    return document.body.classList.contains('animated-mode') ? 'animated' : 'static';
+}
+
+function setBackgroundMode(mode) {
+    const safeMode = mode === 'animated' ? 'animated' : 'static';
+    document.body.classList.toggle('animated-mode', safeMode === 'animated');
+    document.body.classList.toggle('static-mode', safeMode === 'static');
+    localStorage.setItem(audioModeKey, safeMode);
+
+    document.querySelectorAll('.mode-option').forEach((button) => {
+        const isSelected = button.dataset.mode === safeMode;
+        button.classList.toggle('active', isSelected);
+        button.setAttribute('aria-pressed', String(isSelected));
+    });
+
+    if (safeMode === 'animated') {
+        elBg.classList.remove('active');
+        elBgAlt.classList.remove('active');
+        moveVideoToBackground();
+        videoPlayer.muted = true;
+        videoPlayer.defaultMuted = true;
+        document.body.classList.add('animated-mode');
+        if (audio.src && !audio.paused) {
+            syncVideoPlayer(true);
+            videoPlayer.play().catch(() => {});
+        }
+    } else {
+        document.body.classList.remove('animated-mode');
+        moveVideoToInline();
+        videoPlayer.muted = true;
+        videoPlayer.defaultMuted = true;
+        syncVideoPlayer(true);
+        if (library.length > 0 && library[currentIndex]?.thumbnail) {
+            setStaticBackground(library[currentIndex].thumbnail);
+        }
+    }
+}
+
+function setStaticBackground(imageUrl) {
+    if (!imageUrl || getBackgroundMode() !== 'static') return;
+    const nextBg = activeBg === elBg ? elBgAlt : elBg;
+    nextBg.style.backgroundImage = `url('${imageUrl}')`;
+    nextBg.classList.add('active');
+    activeBg.classList.remove('active');
+    activeBg = nextBg;
 }
 
 let isShuffle = false;
@@ -16,7 +91,6 @@ let shuffleHistory = [];
 const elTitle = document.getElementById('title');
 const elArtist = document.getElementById('artist');
 const elArtwork = document.getElementById('artwork');
-const elBg = document.getElementById('app-background');
 const elTimeCur = document.getElementById('time-current');
 const elTimeTot = document.getElementById('time-total');
 const elProgressFill = document.getElementById('progress-fill');
@@ -38,52 +112,76 @@ const btnImportOpen = document.getElementById('btn-import-open');
 const btnImportCancel = document.getElementById('btn-import-cancel');
 const btnImportSubmit = document.getElementById('btn-import-submit');
 
+function recoverVideoPlayback() {
+    if (!videoPlayer || !videoPlayer.src) return;
+
+    const targetTime = Number.isFinite(audio.currentTime) ? audio.currentTime : 0;
+    if (Math.abs(videoPlayer.currentTime - targetTime) > 0.25) {
+        videoPlayer.currentTime = targetTime;
+    }
+
+    if (!audio.paused && document.visibilityState !== 'hidden') {
+        videoPlayer.play().catch(() => {});
+    } else {
+        videoPlayer.pause();
+    }
+}
+
 async function init() {
     try {
+        const savedMode = localStorage.getItem(audioModeKey);
+        if (savedMode) {
+            setBackgroundMode(savedMode);
+        } else {
+            setBackgroundMode('static');
+        }
+
         const res = await fetch('/api/library');
         library = await res.json();
-        
-        if(library.length > 0) {
+
+        if (library.length > 0) {
             const savedId = localStorage.getItem('katt_id');
             const savedTime = localStorage.getItem('katt_time');
-            
+
             let startIdx = library.findIndex(s => s.id === savedId);
-            if(startIdx !== -1) currentIndex = startIdx;
+            if (startIdx !== -1) currentIndex = startIdx;
 
             loadSong(currentIndex, false);
-            if(savedTime) audio.currentTime = parseFloat(savedTime);
+            if (savedTime) audio.currentTime = parseFloat(savedTime);
             renderQueue();
         } else {
-            elTitle.innerText = "No music found";
+            elTitle.innerText = 'No music found';
             elArtist.innerText = "Click 'Import Playlist' to begin";
         }
     } catch (e) {
-        console.error("Failed to load library:", e);
+        console.error('Failed to load library:', e);
     }
 }
 
 function loadSong(index, autoPlay = true) {
     if (library.length === 0) return;
-    
+
     const song = library[index];
     elVideoFallback.href = `https://www.youtube.com/watch?v=${encodeURIComponent(song.id)}`;
     elVideoFallback.hidden = true;
     videoPlayer.src = `/video/${encodeURIComponent(song.id)}`;
     videoPlayer.load();
     audio.src = `/audio/${song.id}`;
-    
+
     elTitle.innerText = song.title;
     elArtist.innerText = song.artist;
-    
+
     if (song.thumbnail) {
         elArtwork.src = song.thumbnail;
-        elBg.style.backgroundImage = `url('${song.thumbnail}')`;
+        if (getBackgroundMode() === 'static') {
+            setStaticBackground(song.thumbnail);
+        }
     }
 
     localStorage.setItem('katt_id', song.id);
 
-    if(autoPlay) audio.play();
-    
+    if (autoPlay) audio.play();
+
     renderQueue();
 }
 
@@ -99,17 +197,17 @@ function togglePlay() {
 function nextSong(isAuto = false) {
     if (library.length === 0) return;
 
-    shuffleHistory.push(currentIndex); 
+    shuffleHistory.push(currentIndex);
 
     if (isShuffle) {
         let nextIdx = Math.floor(Math.random() * library.length);
         if (library.length > 1 && nextIdx === currentIndex) {
-            nextIdx = (nextIdx + 1) % library.length; 
+            nextIdx = (nextIdx + 1) % library.length;
         }
         currentIndex = nextIdx;
     } else {
         if (isAuto === true && repeatMode === 0 && currentIndex === library.length - 1) {
-            return; 
+            return;
         }
         currentIndex = (currentIndex + 1) % library.length;
     }
@@ -120,10 +218,10 @@ function prevSong() {
     if (library.length === 0) return;
     if (audio.currentTime > 3) {
         audio.currentTime = 0;
-        if(ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(0);
+        if (typeof ytPlayer !== 'undefined' && ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(0);
     } else {
         if (isShuffle && shuffleHistory.length > 0) {
-            currentIndex = shuffleHistory.pop(); // Go back to the genuinely previous random song
+            currentIndex = shuffleHistory.pop();
         } else {
             currentIndex = (currentIndex - 1 + library.length) % library.length;
         }
@@ -134,35 +232,34 @@ function prevSong() {
 audio.addEventListener('play', () => {
     iconPlay.style.display = 'none';
     iconPause.style.display = 'block';
-    videoPlayer.play().catch(() => {});
+    syncVideoPlayer(true);
 });
 
 audio.addEventListener('pause', () => {
     iconPlay.style.display = 'block';
     iconPause.style.display = 'none';
-    videoPlayer.pause();
+    syncVideoPlayer(true);
 });
 
 audio.addEventListener('timeupdate', () => {
     const cur = audio.currentTime;
     const tot = audio.duration || 0;
-    
+
     elTimeCur.innerText = formatTime(cur);
     elTimeTot.innerText = formatTime(tot);
     elProgressFill.style.width = tot ? `${(cur / tot) * 100}%` : '0%';
     syncVideoPlayer();
-    
-    if(Math.floor(cur) % 5 === 0) {
+
+    if (Math.floor(cur) % 5 === 0) {
         localStorage.setItem('katt_time', cur);
     }
 });
 
 audio.addEventListener('ended', () => {
-    if (repeatMode === 2) { 
-        // Repeat One Mode
+    if (repeatMode === 2) {
         audio.currentTime = 0;
         audio.play();
-        videoPlayer.currentTime = 0;
+        syncVideoPlayer(true);
     } else {
         nextSong(true);
     }
@@ -174,7 +271,7 @@ elProgressBox.addEventListener('click', (e) => {
     const clickX = e.offsetX;
     const ratio = clickX / width;
     audio.currentTime = ratio * audio.duration;
-    videoPlayer.currentTime = audio.currentTime;
+    syncVideoPlayer(true);
 });
 
 btnShuffle.addEventListener('click', () => {
@@ -183,8 +280,8 @@ btnShuffle.addEventListener('click', () => {
 });
 
 btnRepeat.addEventListener('click', () => {
-    repeatMode = (repeatMode + 1) % 3; // Cycles 0 -> 1 -> 2 -> 0
-    
+    repeatMode = (repeatMode + 1) % 3;
+
     if (repeatMode === 0) {
         btnRepeat.classList.remove('active-control');
         iconRepeat.style.display = 'block';
@@ -196,7 +293,7 @@ btnRepeat.addEventListener('click', () => {
     } else if (repeatMode === 2) {
         btnRepeat.classList.add('active-control');
         iconRepeat.style.display = 'none';
-        iconRepeatOne.style.display = 'block'; // Shows the little "1" inside the arrows
+        iconRepeatOne.style.display = 'block';
     }
 });
 
@@ -212,9 +309,12 @@ document.getElementById('vol-slider').addEventListener('input', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
-    if(e.code === 'Space' && e.target === document.body) { e.preventDefault(); togglePlay(); }
-    if(e.code === 'ArrowRight') { nextSong(); }
-    if(e.code === 'ArrowLeft') { prevSong(); }
+    if (e.code === 'Space' && e.target === document.body) {
+        e.preventDefault();
+        togglePlay();
+    }
+    if (e.code === 'ArrowRight') nextSong();
+    if (e.code === 'ArrowLeft') prevSong();
 });
 
 function renderQueue() {
@@ -234,15 +334,15 @@ function renderQueue() {
             loadSong(currentIndex);
         };
         elQueue.appendChild(div);
-        
-        if(i === currentIndex) {
+
+        if (i === currentIndex) {
             div.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
     });
 }
 
 function formatTime(seconds) {
-    if(isNaN(seconds)) return "0:00";
+    if (isNaN(seconds)) return '0:00';
     const m = Math.floor(seconds / 60);
     const s = Math.floor(seconds % 60);
     return `${m}:${s.toString().padStart(2, '0')}`;
@@ -250,11 +350,36 @@ function formatTime(seconds) {
 
 videoPlayer.addEventListener('loadeddata', () => {
     elVideoFallback.hidden = true;
-    syncVideoPlayer();
+    syncVideoPlayer(true);
 });
 videoPlayer.addEventListener('error', () => {
     elVideoFallback.hidden = false;
 });
+
+videoPlayer.addEventListener('waiting', () => {
+    if (!audio.paused) {
+        recoverVideoPlayback();
+    }
+});
+
+const modeButtons = document.querySelectorAll('.mode-option');
+modeButtons.forEach((button) => {
+    button.addEventListener('click', () => {
+        setBackgroundMode(button.dataset.mode);
+    });
+});
+
+function handlePageRecovery() {
+    if (document.visibilityState === 'visible') {
+        recoverVideoPlayback();
+    }
+}
+
+document.addEventListener('visibilitychange', handlePageRecovery);
+window.addEventListener('pageshow', handlePageRecovery);
+window.addEventListener('resize', handlePageRecovery);
+document.addEventListener('fullscreenchange', handlePageRecovery);
+window.addEventListener('focus', handlePageRecovery);
 
 if (btnImportOpen) btnImportOpen.onclick = () => modal.style.display = 'flex';
 if (btnImportCancel) btnImportCancel.onclick = () => modal.style.display = 'none';
@@ -262,15 +387,15 @@ if (btnImportCancel) btnImportCancel.onclick = () => modal.style.display = 'none
 if (btnImportSubmit) {
     btnImportSubmit.onclick = async () => {
         const url = inputUrl.value.trim();
-        if(!url) return;
-        
+        if (!url) return;
+
         btnImportSubmit.innerText = 'Syncing...';
         await fetch('/api/import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ url })
         });
-        
+
         modal.style.display = 'none';
         inputUrl.value = '';
         btnImportSubmit.innerText = 'Start Sync';
@@ -281,25 +406,25 @@ let isPolling = false;
 setInterval(async () => {
     if (isPolling) return;
     isPolling = true;
-    
+
     try {
         const res = await fetch('/api/library');
         const newLibrary = await res.json();
-        
+
         if (newLibrary.length > library.length) {
             const wasEmpty = library.length === 0;
             library = newLibrary;
             renderQueue();
-            
+
             if (wasEmpty && library.length > 0) {
                 currentIndex = 0;
                 loadSong(0, true);
             }
         }
-    } catch(e) {
-        console.error("Polling error:", e);
+    } catch (e) {
+        console.error('Polling error:', e);
     }
-    
+
     isPolling = false;
 }, 3000);
 
