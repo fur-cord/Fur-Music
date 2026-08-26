@@ -104,7 +104,7 @@ def sync_playlist_task(playlist_url):
     global library_data, is_syncing
     is_syncing = True
     print(f"Fetching playlist metadata from: {playlist_url}")
-    
+
     ydl_opts_flat = {'extract_flat': True, 'quiet': True}
     try:
         with yt_dlp.YoutubeDL(ydl_opts_flat) as ydl:
@@ -116,11 +116,11 @@ def sync_playlist_task(playlist_url):
         return
 
     print(f"Found {len(entries)} tracks. Starting background download...")
-    
+
     for entry in entries:
         if not entry: continue
         vid = entry.get('id')
-        
+
         if any(item.get('id') == vid for item in library_data):
             continue
 
@@ -136,23 +136,49 @@ def sync_playlist_task(playlist_url):
             'quiet': True,
             'no_warnings': True
         }
+
+        audio_ok = False
+        dl_info = None
         try:
             with yt_dlp.YoutubeDL(dl_opts) as ydl_dl:
                 dl_info = ydl_dl.extract_info(vid, download=True)
-                item_data = {
-                    'id': vid,
-                    'title': dl_info.get('title'),
-                    'artist': dl_info.get('uploader'),
-                    'thumbnail': dl_info.get('thumbnail'),
-                    'duration': dl_info.get('duration')
-                }
-                
-                library_data.append(item_data)
-                with open(LIB_FILE, 'w') as f:
-                    json.dump(library_data, f, indent=4)
-                    
+            audio_ok = True
         except Exception as e:
-            print(f"Failed to download {vid}: {e}")
+            print(f"Failed to download audio for {vid}: {e}")
+            continue
+
+        # Also grab a (muted, low-weight) video file so the inline
+        # video-wrapper / animated background has something real to play.
+        # This is independent of the audio download above and best-effort:
+        # if it fails, the song still stays in the library, just without video.
+        has_video = False
+        video_dl_opts = {
+            'format': 'bestvideo[ext=mp4][height<=720]/best[ext=mp4]/best',
+            'outtmpl': os.path.join(CACHE_DIR, f'{vid}_video.%(ext)s'),
+            'merge_output_format': 'mp4',
+            'quiet': True,
+            'no_warnings': True
+        }
+        try:
+            with yt_dlp.YoutubeDL(video_dl_opts) as ydl_vid:
+                ydl_vid.extract_info(vid, download=True)
+            video_path = os.path.join(CACHE_DIR, f'{vid}_video.mp4')
+            has_video = os.path.exists(video_path)
+        except Exception as e:
+            print(f"Video download skipped for {vid}: {e}")
+
+        item_data = {
+            'id': vid,
+            'title': dl_info.get('title'),
+            'artist': dl_info.get('uploader'),
+            'thumbnail': dl_info.get('thumbnail'),
+            'duration': dl_info.get('duration'),
+            'has_video': has_video
+        }
+
+        library_data.append(item_data)
+        with open(LIB_FILE, 'w') as f:
+            json.dump(library_data, f, indent=4)
 
     is_syncing = False
     print("Playlist sync complete!")
@@ -174,7 +200,7 @@ def import_playlist():
     global is_syncing
     url = request.json.get('url')
     if not url: return jsonify({"error": "No URL provided"}), 400
-    
+
     if not is_syncing:
         threading.Thread(target=sync_playlist_task, args=(url,), daemon=True).start()
         return jsonify({"message": "Import started in background."})
@@ -185,26 +211,26 @@ def update_rpc():
     global discord_ipc
     data = request.json
     enabled = data.get('enabled', False)
-    
+
     if not enabled:
         if discord_ipc:
             discord_ipc.close()
             discord_ipc = None
         return jsonify({"status": "cleared"})
-        
+
     try:
         if not discord_ipc:
             client_id = os.getenv("DISCORD_CLIENT_ID", "1314349313437597758")
             if not client_id:
                 client_id = "1314349313437597758"
-                
+
             discord_ipc = MinimalDiscordIPC(client_id)
             discord_ipc.connect()
-            
+
         activity = {}
         if data.get('show_title') and data.get('title'):
             activity['details'] = data['title'][:128]
-        
+
         if data.get('show_artist') and data.get('artist'):
             state_str = data['artist']
             if data.get('paused'):
@@ -212,21 +238,21 @@ def update_rpc():
             activity['state'] = state_str[:128]
         elif data.get('paused'):
             activity['state'] = "⏸ Paused"
-            
+
         if data.get('show_time') and not data.get('paused'):
             start_ts = int(time.time() - data.get('current_time', 0))
             activity['timestamps'] = {'start': start_ts}
-            
+
         if data.get('show_art') and data.get('thumbnail'):
             activity['assets'] = {
                 'large_image': data['thumbnail'],
                 'large_text': data.get('title', 'Katt-Music')[:128]
             }
-            
+
         activity['buttons'] = [
             {"label": "View on GitHub", "url": "https://github.com/your-username/your-repo"}
         ]
-            
+
         discord_ipc.set_activity(activity)
         return jsonify({"status": "updated"})
     except Exception as e:
@@ -236,7 +262,6 @@ def update_rpc():
             discord_ipc = None
         return jsonify({"status": "error", "message": str(e)}), 500
 
-@app.route('/video/<video_id>')
 @app.route('/audio/<video_id>')
 def get_audio(video_id):
     path = os.path.join(CACHE_DIR, f"{video_id}.mp3")
@@ -244,14 +269,31 @@ def get_audio(video_id):
         return send_file(path, mimetype="audio/mpeg")
     return "Not found", 404
 
+
+@app.route('/video/<video_id>')
+def get_video(video_id):
+    path = os.path.join(CACHE_DIR, f"{video_id}_video.mp4")
+    if os.path.exists(path):
+        return send_file(path, mimetype="video/mp4")
+    return "Not found", 404
+
+
+# =====================================================================
+# VIDEO MODE — additive, isolated feature. Does not touch anything above.
+# Watches a single standalone YouTube video (downloaded as MP4 via
+# yt-dlp), independent from the music library/playback logic.
+# =====================================================================
+
 VIDEO_MODE_CACHE_DIR = "video_mode_cache"
 os.makedirs(VIDEO_MODE_CACHE_DIR, exist_ok=True)
 VIDEO_MODE_STATE_FILE = os.path.join(VIDEO_MODE_CACHE_DIR, "current.json")
 
+# In-memory state for the single "currently loaded" Video Mode video.
 video_mode_state = {}
-video_mode_status = {"state": "idle", "error": None}
+video_mode_status = {"state": "idle", "error": None}  # idle | downloading | ready | error
 video_mode_lock = threading.Lock()
 
+# Recover any previously downloaded video on server restart.
 if os.path.exists(VIDEO_MODE_STATE_FILE):
     try:
         with open(VIDEO_MODE_STATE_FILE, 'r') as f:
@@ -308,6 +350,7 @@ def download_video_mode_task(url):
     with video_mode_lock:
         video_mode_status = {"state": "downloading", "error": None}
 
+    # Only one video lives in Video Mode at a time — clear whatever was here before.
     clear_video_mode_files()
 
     ydl_opts = {
@@ -317,6 +360,7 @@ def download_video_mode_task(url):
         'noplaylist': True,
         'quiet': True,
         'no_warnings': True,
+        # No cookies / browser session data are read or required.
     }
 
     try:
@@ -421,9 +465,9 @@ def videomode_file(video_id):
 
 if __name__ == '__main__':
     print(f"Server ready! Listening on http://localhost:{PORT}")
-    
+
     env_url = os.getenv("YOUTUBE_PLAYLIST_URL")
     if env_url:
         threading.Thread(target=sync_playlist_task, args=(env_url,), daemon=True).start()
-        
+
     app.run(host='0.0.0.0', port=PORT, debug=True, use_reloader=False)
