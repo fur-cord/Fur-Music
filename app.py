@@ -6,7 +6,8 @@ import struct
 import socket
 import threading
 import time
-import mimetypes
+import re
+import glob
 from flask import Flask, render_template, jsonify, send_file, request
 from dotenv import load_dotenv
 import yt_dlp
@@ -28,15 +29,6 @@ if os.path.exists(LIB_FILE):
             library_data = json.load(f)
         except:
             library_data = []
-
-
-def find_cached_file(video_id, extensions):
-    for ext in extensions:
-        path = os.path.join(CACHE_DIR, f"{video_id}.{ext}")
-        if os.path.exists(path):
-            return path
-    return None
-
 
 class MinimalDiscordIPC:
     def __init__(self, client_id):
@@ -112,7 +104,7 @@ def sync_playlist_task(playlist_url):
     global library_data, is_syncing
     is_syncing = True
     print(f"Fetching playlist metadata from: {playlist_url}")
-
+    
     ydl_opts_flat = {'extract_flat': True, 'quiet': True}
     try:
         with yt_dlp.YoutubeDL(ydl_opts_flat) as ydl:
@@ -124,85 +116,43 @@ def sync_playlist_task(playlist_url):
         return
 
     print(f"Found {len(entries)} tracks. Starting background download...")
-
+    
     for entry in entries:
-        if not entry:
-            continue
+        if not entry: continue
         vid = entry.get('id')
-
-        if not vid or any(item.get('id') == vid for item in library_data):
+        
+        if any(item.get('id') == vid for item in library_data):
             continue
 
-        print(f"Downloading media for: {entry.get('title')}...")
-
-        video_path = find_cached_file(vid, ['mp4', 'webm', 'mkv'])
-        audio_path = find_cached_file(vid, ['mp3', 'm4a', 'aac'])
-
-        if not video_path:
-            video_opts = {
-                'format': 'bestvideo[ext=mp4]/best[ext=mp4]/bestvideo',
-                'outtmpl': os.path.join(CACHE_DIR, f'{vid}.%(ext)s'),
-                'quiet': True,
-                'no_warnings': True,
-                'noplaylist': True,
-            }
-            try:
-                with yt_dlp.YoutubeDL(video_opts) as ydl_video:
-                    video_meta = ydl_video.extract_info(vid, download=True)
-                    if video_meta and video_meta.get('requested_formats'):
-                        video_path = find_cached_file(vid, ['mp4', 'webm', 'mkv'])
-            except Exception as e:
-                print(f"Failed to download video {vid}: {e}")
-
-        if not audio_path:
-            audio_opts = {
-                'format': 'bestaudio/best',
-                'outtmpl': os.path.join(CACHE_DIR, f'{vid}.%(ext)s'),
-                'postprocessors': [{
-                    'key': 'FFmpegExtractAudio',
-                    'preferredcodec': 'mp3',
-                    'preferredquality': '192',
-                }],
-                'quiet': True,
-                'no_warnings': True,
-                'noplaylist': True,
-            }
-            try:
-                with yt_dlp.YoutubeDL(audio_opts) as ydl_audio:
-                    audio_meta = ydl_audio.extract_info(vid, download=True)
-                    audio_path = find_cached_file(vid, ['mp3', 'm4a', 'aac'])
-                    if audio_meta:
-                        thumbnail = audio_meta.get('thumbnail')
-                        title = audio_meta.get('title')
-                        uploader = audio_meta.get('uploader')
-                        duration = audio_meta.get('duration')
-                    else:
-                        thumbnail = entry.get('thumbnail')
-                        title = entry.get('title')
-                        uploader = entry.get('uploader')
-                        duration = entry.get('duration')
-            except Exception as e:
-                print(f"Failed to download audio {vid}: {e}")
-                thumbnail = entry.get('thumbnail')
-                title = entry.get('title')
-                uploader = entry.get('uploader')
-                duration = entry.get('duration')
-        else:
-            thumbnail = entry.get('thumbnail')
-            title = entry.get('title')
-            uploader = entry.get('uploader')
-            duration = entry.get('duration')
-
-        item_data = {
-            'id': vid,
-            'title': title,
-            'artist': uploader,
-            'thumbnail': thumbnail,
-            'duration': duration,
+        print(f"Downloading audio: {entry.get('title')}...")
+        dl_opts = {
+            'format': 'bestaudio/best',
+            'outtmpl': os.path.join(CACHE_DIR, f'{vid}.%(ext)s'),
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'quiet': True,
+            'no_warnings': True
         }
-        library_data.append(item_data)
-        with open(LIB_FILE, 'w') as f:
-            json.dump(library_data, f, indent=4)
+        try:
+            with yt_dlp.YoutubeDL(dl_opts) as ydl_dl:
+                dl_info = ydl_dl.extract_info(vid, download=True)
+                item_data = {
+                    'id': vid,
+                    'title': dl_info.get('title'),
+                    'artist': dl_info.get('uploader'),
+                    'thumbnail': dl_info.get('thumbnail'),
+                    'duration': dl_info.get('duration')
+                }
+                
+                library_data.append(item_data)
+                with open(LIB_FILE, 'w') as f:
+                    json.dump(library_data, f, indent=4)
+                    
+        except Exception as e:
+            print(f"Failed to download {vid}: {e}")
 
     is_syncing = False
     print("Playlist sync complete!")
@@ -274,7 +224,7 @@ def update_rpc():
             }
             
         activity['buttons'] = [
-            {"label": "View on GitHub", "url": "https://github.com/katt-dev/Katt-Music"}
+            {"label": "View on GitHub", "url": "https://github.com/your-username/your-repo"}
         ]
             
         discord_ipc.set_activity(activity)
@@ -287,21 +237,187 @@ def update_rpc():
         return jsonify({"status": "error", "message": str(e)}), 500
 
 @app.route('/video/<video_id>')
-def get_video(video_id):
-    path = find_cached_file(video_id, ['mp4', 'webm', 'mkv'])
-    if path:
-        mimetype, _ = mimetypes.guess_type(path)
-        return send_file(path, mimetype=mimetype or 'video/mp4')
-    return "Not found", 404
-
-
 @app.route('/audio/<video_id>')
 def get_audio(video_id):
-    path = find_cached_file(video_id, ['mp3', 'm4a', 'aac'])
-    if path:
-        mimetype, _ = mimetypes.guess_type(path)
-        return send_file(path, mimetype=mimetype or 'audio/mpeg')
+    path = os.path.join(CACHE_DIR, f"{video_id}.mp3")
+    if os.path.exists(path):
+        return send_file(path, mimetype="audio/mpeg")
     return "Not found", 404
+
+VIDEO_MODE_CACHE_DIR = "video_mode_cache"
+os.makedirs(VIDEO_MODE_CACHE_DIR, exist_ok=True)
+VIDEO_MODE_STATE_FILE = os.path.join(VIDEO_MODE_CACHE_DIR, "current.json")
+
+video_mode_state = {}
+video_mode_status = {"state": "idle", "error": None}
+video_mode_lock = threading.Lock()
+
+if os.path.exists(VIDEO_MODE_STATE_FILE):
+    try:
+        with open(VIDEO_MODE_STATE_FILE, 'r') as f:
+            _saved_state = json.load(f)
+        _saved_path = os.path.join(VIDEO_MODE_CACHE_DIR, _saved_state.get('filename', ''))
+        if _saved_state and os.path.exists(_saved_path):
+            video_mode_state = _saved_state
+            video_mode_status = {"state": "ready", "error": None}
+    except Exception:
+        video_mode_state = {}
+
+YOUTUBE_URL_RE = re.compile(
+    r'^https?://(www\.)?(youtube\.com/(watch\?v=|shorts/)|youtu\.be/|m\.youtube\.com/watch\?v=)[\w-]+',
+    re.IGNORECASE
+)
+
+VIDEO_ID_RE = re.compile(r'^[\w-]+$')
+
+
+def is_valid_youtube_url(url):
+    if not url or not isinstance(url, str) or len(url) > 500:
+        return False
+    return bool(YOUTUBE_URL_RE.match(url.strip()))
+
+
+def clear_video_mode_files():
+    """Remove all downloaded/partial Video Mode files, keeping the cache dir."""
+    for f in glob.glob(os.path.join(VIDEO_MODE_CACHE_DIR, "*")):
+        if os.path.basename(f) == "current.json":
+            continue
+        try:
+            os.remove(f)
+        except Exception as e:
+            print(f"Video Mode cleanup: failed to remove {f}: {e}")
+
+
+def save_video_mode_state():
+    with open(VIDEO_MODE_STATE_FILE, 'w') as f:
+        json.dump(video_mode_state, f, indent=4)
+
+
+def clear_video_mode_state_file():
+    if os.path.exists(VIDEO_MODE_STATE_FILE):
+        try:
+            os.remove(VIDEO_MODE_STATE_FILE)
+        except Exception:
+            pass
+
+
+def download_video_mode_task(url):
+    """Runs in a background thread. Downloads a single YouTube video as MP4."""
+    global video_mode_state, video_mode_status
+
+    with video_mode_lock:
+        video_mode_status = {"state": "downloading", "error": None}
+
+    clear_video_mode_files()
+
+    ydl_opts = {
+        'format': 'bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'outtmpl': os.path.join(VIDEO_MODE_CACHE_DIR, '%(id)s.%(ext)s'),
+        'merge_output_format': 'mp4',
+        'noplaylist': True,
+        'quiet': True,
+        'no_warnings': True,
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+
+        vid_id = info.get('id')
+        if not vid_id or not VIDEO_ID_RE.match(vid_id):
+            raise Exception("Unexpected video id from downloader.")
+
+        final_path = os.path.join(VIDEO_MODE_CACHE_DIR, f"{vid_id}.mp4")
+        if not os.path.exists(final_path):
+            candidates = glob.glob(os.path.join(VIDEO_MODE_CACHE_DIR, f"{vid_id}.*"))
+            if candidates:
+                final_path = candidates[0]
+            else:
+                raise Exception("Download completed but no output file was found.")
+
+        with video_mode_lock:
+            video_mode_state = {
+                'id': vid_id,
+                'title': info.get('title') or 'Untitled video',
+                'uploader': info.get('uploader') or '',
+                'thumbnail': info.get('thumbnail') or '',
+                'duration': info.get('duration') or 0,
+                'filename': os.path.basename(final_path)
+            }
+            save_video_mode_state()
+            video_mode_status = {"state": "ready", "error": None}
+
+        print(f"Video Mode: downloaded '{video_mode_state['title']}'")
+
+    except Exception as e:
+        print(f"Video Mode download failed: {e}")
+        clear_video_mode_files()
+        clear_video_mode_state_file()
+        with video_mode_lock:
+            video_mode_state = {}
+            video_mode_status = {
+                "state": "error",
+                "error": "Couldn't download that video. It may be unavailable, "
+                         "private, region-locked, or the link isn't a valid "
+                         "YouTube video URL."
+            }
+
+
+@app.route('/api/videomode/import', methods=['POST'])
+def videomode_import():
+    data = request.get_json(silent=True) or {}
+    url = (data.get('url') or '').strip()
+
+    if not is_valid_youtube_url(url):
+        return jsonify({"error": "Please paste a valid YouTube video URL."}), 400
+
+    with video_mode_lock:
+        already_running = video_mode_status.get("state") == "downloading"
+
+    if already_running:
+        return jsonify({"message": "A download is already in progress."})
+
+    threading.Thread(target=download_video_mode_task, args=(url,), daemon=True).start()
+    return jsonify({"message": "Download started."})
+
+
+@app.route('/api/videomode/status')
+def videomode_status():
+    with video_mode_lock:
+        return jsonify({
+            "status": video_mode_status.get("state", "idle"),
+            "error": video_mode_status.get("error"),
+            "video": video_mode_state if video_mode_state else None
+        })
+
+
+@app.route('/api/videomode/stop', methods=['POST'])
+def videomode_stop():
+    """Stops/closes the current Video Mode video and deletes it from disk."""
+    global video_mode_state, video_mode_status
+    with video_mode_lock:
+        clear_video_mode_files()
+        clear_video_mode_state_file()
+        video_mode_state = {}
+        video_mode_status = {"state": "idle", "error": None}
+    return jsonify({"status": "cleared"})
+
+
+@app.route('/videomode/file/<video_id>')
+def videomode_file(video_id):
+    if not VIDEO_ID_RE.match(video_id):
+        return "Invalid id", 400
+
+    with video_mode_lock:
+        if not video_mode_state or video_mode_state.get('id') != video_id:
+            return "Not found", 404
+        filename = video_mode_state.get('filename')
+
+    path = os.path.join(VIDEO_MODE_CACHE_DIR, filename)
+    if filename and os.path.exists(path):
+        return send_file(path, mimetype="video/mp4")
+    return "Not found", 404
+
 
 if __name__ == '__main__':
     print(f"Server ready! Listening on http://localhost:{PORT}")
