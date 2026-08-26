@@ -299,6 +299,17 @@ input[type=range]::-moz-range-thumb {
 }
 .btn-import:hover { background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.2); }
 
+.btn-rpc {
+    background: rgba(88, 101, 242, 0.15);
+}
+.btn-rpc:hover {
+    background: rgba(88, 101, 242, 0.3);
+    border-color: rgba(88, 101, 242, 0.5);
+}
+.btn-rpc svg {
+    color: #c4c9fa;
+}
+
 .modal-overlay {
     position: fixed; top: 0; left: 0; width: 100%; height: 100%;
     background: rgba(0,0,0,0.6); backdrop-filter: blur(8px); z-index: 200;
@@ -325,6 +336,70 @@ input[type=range]::-moz-range-thumb {
     padding: 10px 20px; border-radius: 8px; cursor: pointer; font-family: 'Inter', sans-serif; transition: 0.2s;
 }
 .btn-glow:hover { background: rgba(255,255,255,0.2); box-shadow: 0 0 15px rgba(255,255,255,0.3); }
+
+/* RPC Settings Glass Checkboxes */
+.rpc-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    background: rgba(0,0,0,0.2);
+    padding: 15px;
+    border-radius: 12px;
+    border: 1px solid var(--glass-border);
+}
+
+.rpc-toggle-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    cursor: pointer;
+}
+
+.rpc-label {
+    font-size: 0.9rem;
+    color: white;
+}
+
+.rpc-divider {
+    height: 1px;
+    background: rgba(255,255,255,0.1);
+    margin: 5px 0;
+}
+
+.glass-checkbox {
+    appearance: none;
+    width: 44px;
+    height: 24px;
+    background: rgba(255,255,255,0.1);
+    border-radius: 12px;
+    position: relative;
+    cursor: pointer;
+    outline: none;
+    transition: 0.3s;
+    border: 1px solid rgba(255,255,255,0.2);
+}
+
+.glass-checkbox::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    background: white;
+    border-radius: 50%;
+    transition: 0.3s;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+.glass-checkbox:checked {
+    background: rgba(162, 128, 255, 0.6);
+    border-color: rgba(162, 128, 255, 0.8);
+}
+
+.glass-checkbox:checked::after {
+    transform: translateX(20px);
+}
 
 * {
   scrollbar-width: none !important;
