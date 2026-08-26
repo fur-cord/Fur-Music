@@ -516,3 +516,350 @@ setInterval(async () => {
 }, 3000);
 
 init();
+
+(function initSettingsDropdown() {
+    const btnSettingsOpen = document.getElementById('btn-settings-open');
+    const settingsPanel = document.getElementById('settings-panel');
+    if (!btnSettingsOpen || !settingsPanel) return;
+
+    btnSettingsOpen.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = settingsPanel.style.display === 'flex';
+        settingsPanel.style.display = isOpen ? 'none' : 'flex';
+        btnSettingsOpen.setAttribute('aria-expanded', String(!isOpen));
+    });
+
+    document.addEventListener('click', (e) => {
+        if (settingsPanel.style.display !== 'flex') return;
+        if (settingsPanel.contains(e.target) || btnSettingsOpen.contains(e.target)) return;
+        settingsPanel.style.display = 'none';
+        btnSettingsOpen.setAttribute('aria-expanded', 'false');
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') {
+            settingsPanel.style.display = 'none';
+            btnSettingsOpen.setAttribute('aria-expanded', 'false');
+        }
+    });
+})();
+
+const viewModeKey = 'katt_view_mode';
+
+function setViewMode(view) {
+    const safeView = view === 'video' ? 'video' : 'music';
+    document.body.classList.toggle('video-mode-active', safeView === 'video');
+
+    document.querySelectorAll('.view-mode-option').forEach((btn) => {
+        const selected = btn.dataset.view === safeView;
+        btn.classList.toggle('active', selected);
+        btn.setAttribute('aria-pressed', String(selected));
+    });
+
+    localStorage.setItem(viewModeKey, safeView);
+}
+
+document.querySelectorAll('.view-mode-option').forEach((btn) => {
+    btn.addEventListener('click', () => setViewMode(btn.dataset.view));
+});
+
+setViewMode(localStorage.getItem(viewModeKey) || 'music');
+
+(function initVideoMode() {
+    const vmVideo = document.getElementById('vm-video');
+    if (!vmVideo) return;
+
+    const vmImportState = document.getElementById('vm-import-state');
+    const vmPlayerState = document.getElementById('vm-player-state');
+    const vmLoadingState = document.getElementById('vm-loading-state');
+    const vmErrorState = document.getElementById('vm-error-state');
+    const vmErrorText = document.getElementById('vm-error-text');
+    const vmTitle = document.getElementById('vm-title');
+    const vmUploader = document.getElementById('vm-uploader');
+    const vmTimeCur = document.getElementById('vm-time-current');
+    const vmTimeTot = document.getElementById('vm-time-total');
+    const vmProgressFill = document.getElementById('vm-progress-fill');
+    const vmProgressBox = document.getElementById('vm-progress-container');
+    const vmIconPlay = document.getElementById('vm-icon-play');
+    const vmIconPause = document.getElementById('vm-icon-pause');
+
+    const vmImportModal = document.getElementById('vm-import-modal');
+    const vmImportUrl = document.getElementById('vm-import-url');
+    const btnVmImportOpen = document.getElementById('btn-vm-import-open');
+    const btnVmImportCancel = document.getElementById('btn-vm-import-cancel');
+    const btnVmImportSubmit = document.getElementById('btn-vm-import-submit');
+    const btnVmRetry = document.getElementById('btn-vm-retry');
+    const btnVmPlay = document.getElementById('vm-btn-play');
+    const btnVmStop = document.getElementById('vm-btn-stop');
+    const btnVmMute = document.getElementById('vm-btn-mute');
+    const vmVolSlider = document.getElementById('vm-vol-slider');
+    const btnVmFullscreen = document.getElementById('vm-btn-fullscreen');
+    const vmIconFsEnter = document.getElementById('vm-icon-fs-enter');
+    const vmIconFsExit = document.getElementById('vm-icon-fs-exit');
+
+    let vmPollTimer = null;
+
+    function vmShowState(state) {
+        if (vmImportState) vmImportState.style.display = state === 'import' ? 'flex' : 'none';
+        if (vmLoadingState) vmLoadingState.style.display = state === 'loading' ? 'flex' : 'none';
+        if (vmPlayerState) vmPlayerState.style.display = state === 'player' ? 'flex' : 'none';
+        if (vmErrorState) vmErrorState.style.display = state === 'error' ? 'flex' : 'none';
+    }
+
+    function vmLoadVideo(video) {
+        if (!video) return;
+        const src = `/videomode/file/${encodeURIComponent(video.id)}`;
+        if (vmVideo.getAttribute('src') !== src) {
+            vmVideo.src = src;
+            vmVideo.load();
+        }
+        if (vmTitle) vmTitle.innerText = video.title || 'Untitled video';
+        if (vmUploader) vmUploader.innerText = video.uploader || '';
+    }
+
+    function vmStopPolling() {
+        if (vmPollTimer) {
+            clearInterval(vmPollTimer);
+            vmPollTimer = null;
+        }
+    }
+
+    function vmStartPolling() {
+        vmStopPolling();
+        vmPollTimer = setInterval(async () => {
+            const data = await vmRefreshStatus(false);
+            if (data && data.status !== 'downloading') {
+                vmStopPolling();
+                if (data.status === 'ready' && data.video) vmLoadVideo(data.video);
+            }
+        }, 2000);
+    }
+
+    async function vmRefreshStatus(applyVideo = true) {
+        try {
+            const res = await fetch('/api/videomode/status');
+            const data = await res.json();
+
+            if (data.status === 'downloading') {
+                vmShowState('loading');
+            } else if (data.status === 'error') {
+                if (vmErrorText) vmErrorText.innerText = data.error || 'Something went wrong.';
+                vmShowState('error');
+            } else if (data.status === 'ready' && data.video) {
+                if (applyVideo) vmLoadVideo(data.video);
+                vmShowState('player');
+            } else {
+                vmShowState('import');
+            }
+            return data;
+        } catch (e) {
+            console.error('Video Mode status check failed', e);
+            return null;
+        }
+    }
+
+    function vmTogglePlay() {
+        if (!vmVideo.getAttribute('src')) return;
+        if (vmVideo.paused) {
+            vmVideo.play();
+        } else {
+            vmVideo.pause();
+        }
+    }
+
+    async function vmStopVideo() {
+        vmVideo.pause();
+        vmVideo.removeAttribute('src');
+        vmVideo.load();
+        vmStopPolling();
+
+        if (vmIsFullscreen()) {
+            try {
+                if (document.exitFullscreen) await document.exitFullscreen();
+                else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+            } catch (e) { /* ignore */ }
+        }
+
+        try {
+            await fetch('/api/videomode/stop', { method: 'POST' });
+        } catch (e) {
+            console.error('Failed to clean up Video Mode file', e);
+        }
+
+        vmShowState('import');
+    }
+
+    vmVideo.addEventListener('play', () => {
+        if (vmIconPlay) vmIconPlay.style.display = 'none';
+        if (vmIconPause) vmIconPause.style.display = 'block';
+    });
+    vmVideo.addEventListener('pause', () => {
+        if (vmIconPlay) vmIconPlay.style.display = 'block';
+        if (vmIconPause) vmIconPause.style.display = 'none';
+    });
+    vmVideo.addEventListener('timeupdate', () => {
+        const cur = vmVideo.currentTime;
+        const tot = vmVideo.duration || 0;
+        if (vmTimeCur) vmTimeCur.innerText = formatTime(cur);
+        if (vmTimeTot) vmTimeTot.innerText = formatTime(tot);
+        if (vmProgressFill) vmProgressFill.style.width = tot ? `${(cur / tot) * 100}%` : '0%';
+    });
+    vmVideo.addEventListener('error', () => {
+        if (vmVideo.getAttribute('src')) {
+            if (vmErrorText) vmErrorText.innerText = 'This video could not be played.';
+            vmShowState('error');
+        }
+    });
+
+    if (vmProgressBox) {
+        vmProgressBox.addEventListener('click', (e) => {
+            if (!vmVideo.duration) return;
+            const width = vmProgressBox.clientWidth;
+            const ratio = e.offsetX / width;
+            vmVideo.currentTime = ratio * vmVideo.duration;
+        });
+    }
+
+    if (btnVmPlay) btnVmPlay.addEventListener('click', vmTogglePlay);
+    if (btnVmStop) btnVmStop.addEventListener('click', vmStopVideo);
+    if (btnVmMute) {
+        btnVmMute.addEventListener('click', () => {
+            vmVideo.muted = !vmVideo.muted;
+            btnVmMute.style.opacity = vmVideo.muted ? '0.5' : '1';
+        });
+    }
+    if (vmVolSlider) {
+        vmVolSlider.addEventListener('input', (e) => {
+            vmVideo.volume = e.target.value;
+            vmVideo.muted = false;
+        });
+    }
+
+    if (btnVmImportOpen) btnVmImportOpen.onclick = () => { vmImportModal.style.display = 'flex'; };
+    if (btnVmImportCancel) btnVmImportCancel.onclick = () => { vmImportModal.style.display = 'none'; };
+    if (btnVmRetry) btnVmRetry.onclick = () => vmShowState('import');
+
+    function vmIsFullscreen() {
+        return !!(document.fullscreenElement || document.webkitFullscreenElement);
+    }
+
+    function vmSetFullscreenIcon() {
+        const active = vmIsFullscreen();
+        if (vmIconFsEnter) vmIconFsEnter.style.display = active ? 'none' : 'block';
+        if (vmIconFsExit) vmIconFsExit.style.display = active ? 'block' : 'none';
+    }
+
+    async function vmToggleFullscreen() {
+        if (!vmPlayerState) return;
+        try {
+            if (!vmIsFullscreen()) {
+                if (vmPlayerState.requestFullscreen) {
+                    await vmPlayerState.requestFullscreen();
+                } else if (vmPlayerState.webkitRequestFullscreen) {
+                    vmPlayerState.webkitRequestFullscreen();
+                }
+            } else {
+                if (document.exitFullscreen) {
+                    await document.exitFullscreen();
+                } else if (document.webkitExitFullscreen) {
+                    document.webkitExitFullscreen();
+                }
+            }
+        } catch (e) {
+            console.error('Fullscreen toggle failed', e);
+        }
+    }
+
+    if (btnVmFullscreen) btnVmFullscreen.addEventListener('click', vmToggleFullscreen);
+    document.addEventListener('fullscreenchange', vmSetFullscreenIcon);
+    document.addEventListener('webkitfullscreenchange', vmSetFullscreenIcon);
+
+    if (btnVmImportSubmit) {
+        btnVmImportSubmit.onclick = async () => {
+            const url = vmImportUrl.value.trim();
+            if (!url) return;
+
+            btnVmImportSubmit.disabled = true;
+            btnVmImportSubmit.innerText = 'Starting...';
+
+            try {
+                const res = await fetch('/api/videomode/import', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    if (vmErrorText) vmErrorText.innerText = data.error || 'Could not start download.';
+                    vmShowState('error');
+                } else {
+                    vmShowState('loading');
+                    vmStartPolling();
+                }
+            } catch (e) {
+                if (vmErrorText) vmErrorText.innerText = 'Network error. Please try again.';
+                vmShowState('error');
+            }
+
+            vmImportModal.style.display = 'none';
+            vmImportUrl.value = '';
+            btnVmImportSubmit.disabled = false;
+            btnVmImportSubmit.innerText = 'Download & Play';
+        };
+    }
+(function initFullscreenAutoHide() {
+    const vmPlayerState = document.getElementById('vm-player-state');
+    const vmBottomBar = document.getElementById('vm-bottom-bar');
+    const vmVideoEl = document.getElementById('vm-video');
+    if (!vmPlayerState || !vmBottomBar) return;
+
+    let hideTimer = null;
+    const HIDE_DELAY = 2500;
+
+    function isFs() {
+        return document.fullscreenElement === vmPlayerState ||
+               document.webkitFullscreenElement === vmPlayerState;
+    }
+
+    function showControls() {
+        vmPlayerState.classList.remove('vm-controls-hidden');
+        scheduleHide();
+    }
+
+    function scheduleHide() {
+        clearTimeout(hideTimer);
+        if (!isFs()) return;
+        if (vmVideoEl && vmVideoEl.paused) return;
+        hideTimer = setTimeout(() => {
+            vmPlayerState.classList.add('vm-controls-hidden');
+        }, HIDE_DELAY);
+    }
+
+    vmPlayerState.addEventListener('mousemove', () => { if (isFs()) showControls(); });
+
+    vmBottomBar.addEventListener('mouseenter', () => {
+        clearTimeout(hideTimer);
+        if (isFs()) vmPlayerState.classList.remove('vm-controls-hidden');
+    });
+    vmBottomBar.addEventListener('mouseleave', () => { if (isFs()) scheduleHide(); });
+
+    ['fullscreenchange', 'webkitfullscreenchange'].forEach((evt) => {
+        document.addEventListener(evt, () => {
+            if (isFs()) {
+                showControls();
+            } else {
+                clearTimeout(hideTimer);
+                vmPlayerState.classList.remove('vm-controls-hidden');
+            }
+        });
+    });
+
+    if (vmVideoEl) {
+        vmVideoEl.addEventListener('play', () => { if (isFs()) scheduleHide(); });
+        vmVideoEl.addEventListener('pause', () => { if (isFs()) showControls(); });
+    }
+})();
+
+    vmRefreshStatus();
+})();
