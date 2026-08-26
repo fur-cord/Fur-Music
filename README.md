@@ -6,11 +6,7 @@ Follow these quick steps to get the server running on your machine:
 
 1. **Install Prerequisites:** Ensure you have Python 3.8+ installed. You also need FFmpeg for audio processing (on Windows, open Command Prompt and type `winget install ffmpeg`).
 2. **Download the Code:** Clone this repository (`git clone https://github.com/katt-dev/Katt-Music.git`) or download the ZIP file and extract it.
-3. **Configure Settings:** Create a new text file named `.env` in the main folder, paste the following lines into it, and customize them if desired:
-   ```env
-   # The Default YouTube playlist URL you want to sync
-   # YOUTUBE_PLAYLIST_URL=https://www.youtube.com/playlist?list=YOUR_PLAYLIST_HERE :3
-   # PORT=8000
+3. **Configure Settings:** Open the text file named `.env` in the main folder, and customize them if desired!
 
 ### Run on PC Startup
 To have Katt-Music launch silently in the background every time you turn on your computer:
