@@ -112,6 +112,80 @@ const btnImportOpen = document.getElementById('btn-import-open');
 const btnImportCancel = document.getElementById('btn-import-cancel');
 const btnImportSubmit = document.getElementById('btn-import-submit');
 
+const rpcModal = document.getElementById('rpc-modal');
+const btnRpcOpen = document.getElementById('btn-rpc-open');
+const btnRpcClose = document.getElementById('btn-rpc-close');
+
+const rpcEnable = document.getElementById('rpc-enable');
+const rpcShowTitle = document.getElementById('rpc-show-title');
+const rpcShowArtist = document.getElementById('rpc-show-artist');
+const rpcShowTime = document.getElementById('rpc-show-time');
+const rpcShowArt = document.getElementById('rpc-show-art');
+
+let rpcSettings = JSON.parse(localStorage.getItem('katt_rpc_settings')) || {
+    enabled: false,
+    showTitle: true,
+    showArtist: true,
+    showTime: true,
+    showArt: true
+};
+
+function initRPCUI() {
+    rpcEnable.checked = rpcSettings.enabled;
+    rpcShowTitle.checked = rpcSettings.showTitle;
+    rpcShowArtist.checked = rpcSettings.showArtist;
+    rpcShowTime.checked = rpcSettings.showTime;
+    rpcShowArt.checked = rpcSettings.showArt;
+}
+
+function saveRPCSettings() {
+    rpcSettings = {
+        enabled: rpcEnable.checked,
+        showTitle: rpcShowTitle.checked,
+        showArtist: rpcShowArtist.checked,
+        showTime: rpcShowTime.checked,
+        showArt: rpcShowArt.checked
+    };
+    localStorage.setItem('katt_rpc_settings', JSON.stringify(rpcSettings));
+    updateRPC();
+}
+
+[rpcEnable, rpcShowTitle, rpcShowArtist, rpcShowTime, rpcShowArt].forEach(el => {
+    if (el) el.addEventListener('change', saveRPCSettings);
+});
+
+let rpcDebounceTimer = null;
+function updateRPC() {
+    if (library.length === 0) return;
+    
+    clearTimeout(rpcDebounceTimer);
+    rpcDebounceTimer = setTimeout(async () => {
+        const currentSong = library[currentIndex];
+        const payload = {
+            enabled: rpcSettings.enabled,
+            show_title: rpcSettings.showTitle,
+            show_artist: rpcSettings.showArtist,
+            show_time: rpcSettings.showTime,
+            show_art: rpcSettings.showArt,
+            title: currentSong ? currentSong.title : '',
+            artist: currentSong ? currentSong.artist : '',
+            thumbnail: currentSong ? currentSong.thumbnail : '',
+            paused: audio.paused,
+            current_time: audio.currentTime
+        };
+
+        try {
+            await fetch('/api/rpc', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+        } catch (e) {
+            console.error("RPC Update failed", e);
+        }
+    }, 500);
+}
+
 function recoverVideoPlayback() {
     if (!videoPlayer || !videoPlayer.src) return;
 
@@ -135,6 +209,8 @@ async function init() {
         } else {
             setBackgroundMode('static');
         }
+
+        initRPCUI();
 
         const res = await fetch('/api/library');
         library = await res.json();
@@ -183,6 +259,7 @@ function loadSong(index, autoPlay = true) {
     if (autoPlay) audio.play();
 
     renderQueue();
+    updateRPC();
 }
 
 function togglePlay() {
@@ -219,6 +296,7 @@ function prevSong() {
     if (audio.currentTime > 3) {
         audio.currentTime = 0;
         if (typeof ytPlayer !== 'undefined' && ytPlayer && ytPlayer.seekTo) ytPlayer.seekTo(0);
+        updateRPC();
     } else {
         if (isShuffle && shuffleHistory.length > 0) {
             currentIndex = shuffleHistory.pop();
@@ -233,12 +311,18 @@ audio.addEventListener('play', () => {
     iconPlay.style.display = 'none';
     iconPause.style.display = 'block';
     syncVideoPlayer(true);
+    updateRPC();
 });
 
 audio.addEventListener('pause', () => {
     iconPlay.style.display = 'block';
     iconPause.style.display = 'none';
     syncVideoPlayer(true);
+    updateRPC();
+});
+
+audio.addEventListener('seeked', () => {
+    updateRPC();
 });
 
 audio.addEventListener('timeupdate', () => {
@@ -383,6 +467,9 @@ window.addEventListener('focus', handlePageRecovery);
 
 if (btnImportOpen) btnImportOpen.onclick = () => modal.style.display = 'flex';
 if (btnImportCancel) btnImportCancel.onclick = () => modal.style.display = 'none';
+
+if (btnRpcOpen) btnRpcOpen.onclick = () => rpcModal.style.display = 'flex';
+if (btnRpcClose) btnRpcClose.onclick = () => rpcModal.style.display = 'none';
 
 if (btnImportSubmit) {
     btnImportSubmit.onclick = async () => {
