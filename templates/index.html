@@ -20,6 +20,11 @@
             Import Playlist
         </button>
 
+        <button id="btn-rpc-open" class="btn-import btn-rpc">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="20" height="20"><path d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4a.09.09 0 0 0-.07.03c-.18.33-.39.76-.53 1.09a16.09 16.09 0 0 0-4.8 0c-.14-.33-.35-.76-.53-1.09a.09.09 0 0 0-.07-.03c-1.5.26-2.94.71-4.27 1.33-.01 0-.02.01-.03.02-2.72 4.07-3.47 8.03-3.1 11.95.01.02.02.04.04.05 1.8 1.32 3.53 2.12 5.24 2.65.03.01.06-.01.07-.03.4-.55.77-1.13 1.1-1.74.02-.04 0-.08-.04-.09-.57-.22-1.11-.48-1.64-.78-.04-.02-.04-.08-.01-.11.12-.08.23-.17.34-.26.03-.02.06-.02.09 0 3.22 1.48 6.7 1.48 9.9 0 .03-.01.06-.01.09 0 .11.09.22.18.34.26.03.03.03.09-.01.11-.52.3-1.07.56-1.64.78-.04.01-.06.06-.04.09.33.61.7 1.19 1.1 1.74.02.02.04.04.07.03 1.71-.53 3.44-1.33 5.24-2.65.02-.01.03-.03.04-.05.42-4.48-.65-8.5-3.14-11.97-.01-.01-.02-.02-.03-.02zM8.52 14.91c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.84 2.12-1.89 2.12zm6.97 0c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.83 2.12-1.89 2.12z"/></svg>
+            Discord RPC
+        </button>
+
         <div class="bg-mode-control glass-panel" aria-label="Background mode selector">
             <span class="mode-label">Background</span>
             <div class="mode-segment" role="tablist" aria-label="Background mode">
@@ -37,6 +42,41 @@
             <div class="modal-actions">
                 <button id="btn-import-cancel" class="btn-text">Cancel</button>
                 <button id="btn-import-submit" class="btn-glow">Start Sync</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="rpc-modal" class="modal-overlay" style="display: none;">
+        <div class="glass-panel modal-content">
+            <h3>Discord Rich Presence</h3>
+            <p>Show what you're listening to on your Discord profile.</p>
+            
+            <div class="rpc-settings">
+                <label class="rpc-toggle-row">
+                    <span class="rpc-label">Enable Rich Presence</span>
+                    <input type="checkbox" id="rpc-enable" class="glass-checkbox">
+                </label>
+                <div class="rpc-divider"></div>
+                <label class="rpc-toggle-row">
+                    <span class="rpc-label">Show Song Title</span>
+                    <input type="checkbox" id="rpc-show-title" class="glass-checkbox">
+                </label>
+                <label class="rpc-toggle-row">
+                    <span class="rpc-label">Show Artist</span>
+                    <input type="checkbox" id="rpc-show-artist" class="glass-checkbox">
+                </label>
+                <label class="rpc-toggle-row">
+                    <span class="rpc-label">Show Playback Time</span>
+                    <input type="checkbox" id="rpc-show-time" class="glass-checkbox">
+                </label>
+                <label class="rpc-toggle-row">
+                    <span class="rpc-label">Show Album Art</span>
+                    <input type="checkbox" id="rpc-show-art" class="glass-checkbox">
+                </label>
+            </div>
+
+            <div class="modal-actions" style="margin-top: 25px;">
+                <button id="btn-rpc-close" class="btn-glow">Close</button>
             </div>
         </div>
     </div>
