@@ -130,7 +130,8 @@ body.animated-mode .overlay-layer {
     padding: 3px;
 }
 
-.mode-option {
+.mode-option,
+.view-mode-option {
     appearance: none;
     border: none;
     background: transparent;
@@ -145,7 +146,8 @@ body.animated-mode .overlay-layer {
     transition: all 0.2s ease;
 }
 
-.mode-option.active {
+.mode-option.active,
+.view-mode-option.active {
     background: rgba(255,255,255,0.12);
     color: white;
     box-shadow: inset 0 0 0 1px rgba(255,255,255,0.08);
@@ -337,7 +339,6 @@ input[type=range]::-moz-range-thumb {
 }
 .btn-glow:hover { background: rgba(255,255,255,0.2); box-shadow: 0 0 15px rgba(255,255,255,0.3); }
 
-/* RPC Settings Glass Checkboxes */
 .rpc-settings {
     display: flex;
     flex-direction: column;
@@ -451,4 +452,279 @@ input[type=range]::-moz-range-thumb {
 
     .btn svg { width: 24px; height: 24px; }
     .btn-play svg { width: 42px; height: 42px; }
+}
+
+.settings-dropdown {
+    position: relative;
+}
+
+.btn-settings svg {
+    color: rgba(255,255,255,0.85);
+}
+
+.settings-panel {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 0;
+    min-width: 240px;
+    padding: 16px;
+    display: none;
+    flex-direction: column;
+    gap: 14px;
+    z-index: 10;
+}
+
+.settings-section {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.settings-section-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.55);
+}
+
+.settings-divider {
+    height: 1px;
+    background: rgba(255,255,255,0.08);
+}
+
+.settings-row-btn {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    background: rgba(88, 101, 242, 0.15);
+    border: 1px solid rgba(88, 101, 242, 0.3);
+    color: white;
+    padding: 10px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    transition: 0.2s ease;
+}
+.settings-row-btn:hover {
+    background: rgba(88, 101, 242, 0.28);
+    border-color: rgba(88, 101, 242, 0.5);
+}
+.settings-row-btn svg {
+    width: 18px; height: 18px;
+    color: #c4c9fa;
+    flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+    .settings-panel {
+        min-width: 210px;
+    }
+}
+
+body.video-mode-active .music-view {
+    display: none;
+}
+
+body.video-mode-active .container {
+    max-width: min(1300px, 94vw);
+    margin-top: 130px;
+    margin-bottom: 50px;
+}
+
+.video-mode-panel {
+    display: none;
+    flex-direction: column;
+    gap: 18px;
+    padding: 24px;
+}
+
+body.video-mode-active .video-mode-panel {
+    display: flex;
+}
+
+.video-mode-header h3 {
+    font-size: 0.95rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: rgba(255,255,255,0.8);
+}
+
+.vm-import-state,
+.vm-loading-state,
+.vm-error-state {
+    display: none;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 50px 20px;
+    text-align: center;
+}
+
+.vm-import-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 26px;
+}
+.vm-import-btn svg { width: 20px; height: 20px; }
+
+.vm-hint {
+    font-size: 0.82rem;
+    color: rgba(255,255,255,0.55);
+    max-width: 280px;
+}
+
+.vm-loading-state p,
+.vm-error-state p {
+    font-size: 0.88rem;
+    color: rgba(255,255,255,0.75);
+}
+
+.vm-spinner {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: 3px solid rgba(255,255,255,0.15);
+    border-top-color: rgba(255,255,255,0.85);
+    animation: vm-spin 0.9s linear infinite;
+}
+
+@keyframes vm-spin {
+    to { transform: rotate(360deg); }
+}
+
+.vm-player-state {
+    display: none;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.vm-video-wrapper {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    max-height: 68vh;
+    border-radius: 16px;
+    overflow: hidden;
+    background: #09090a;
+    box-shadow: 0 5px 20px rgba(0,0,0,0.4);
+    margin: 0 auto;
+}
+
+#vm-video {
+    width: 100%;
+    height: 100%;
+    display: block;
+    object-fit: contain;
+    background: #09090a;
+}
+
+.vm-info {
+    text-align: center;
+}
+.vm-info h4 {
+    font-size: 1rem;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.vm-info span {
+    font-size: 0.82rem;
+    color: rgba(255,255,255,0.6);
+}
+
+.vm-controls {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 22px;
+}
+
+.vm-volume {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-left: 6px;
+}
+
+@media (max-width: 640px) {
+    body.video-mode-active .container {
+        max-width: 96vw;
+        margin-top: 140px;
+    }
+    .video-mode-panel {
+        padding: 20px 16px;
+    }
+    .vm-video-wrapper {
+        max-height: 42vh;
+    }
+    .vm-controls {
+        gap: 16px;
+    }
+}
+
+.vm-bottom-bar {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+#vm-player-state:fullscreen,
+#vm-player-state:-webkit-full-screen {
+    background: #050506;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100vw;
+    height: 100vh;
+    padding: 0;
+    gap: 0;
+}
+
+#vm-player-state:fullscreen .vm-video-wrapper,
+#vm-player-state:-webkit-full-screen .vm-video-wrapper {
+    width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+    margin: 0;
+}
+
+#vm-player-state:fullscreen .vm-bottom-bar,
+#vm-player-state:-webkit-full-screen .vm-bottom-bar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    padding: 60px 32px 26px;
+    background: linear-gradient(to top, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.35) 55%, rgba(0,0,0,0) 100%);
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.35s ease, transform 0.35s ease;
+    z-index: 5;
+}
+
+#vm-player-state:fullscreen.vm-controls-hidden .vm-bottom-bar,
+#vm-player-state:-webkit-full-screen.vm-controls-hidden .vm-bottom-bar {
+    opacity: 0;
+    transform: translateY(24px);
+    pointer-events: none;
+}
+
+#vm-player-state:fullscreen.vm-controls-hidden,
+#vm-player-state:-webkit-full-screen.vm-controls-hidden {
+    cursor: none;
+}
+
+#vm-player-state:fullscreen .progress-section,
+#vm-player-state:fullscreen .vm-controls,
+#vm-player-state:fullscreen .vm-info,
+#vm-player-state:-webkit-full-screen .progress-section,
+#vm-player-state:-webkit-full-screen .vm-controls,
+#vm-player-state:-webkit-full-screen .vm-info {
+    width: 100%;
+    max-width: 900px;
+    margin: 0 auto;
 }
