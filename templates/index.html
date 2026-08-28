@@ -107,11 +107,11 @@
     <div id="vm-import-modal" class="modal-overlay" style="display: none;">
         <div class="glass-panel modal-content">
             <h3>Import Video</h3>
-            <p>Paste a YouTube video URL. It'll be downloaded and played locally, then removed automatically when you stop it.</p>
+            <p>Paste a YouTube video URL to add it to the queue. Videos download in order while you watch.</p>
             <input type="text" id="vm-import-url" class="glass-input" placeholder="https://youtube.com/watch?v=...">
             <div class="modal-actions">
                 <button id="btn-vm-import-cancel" class="btn-text">Cancel</button>
-                <button id="btn-vm-import-submit" class="btn-glow">Download &amp; Play</button>
+                <button id="btn-vm-import-submit" class="btn-glow">Add to Queue</button>
             </div>
         </div>
     </div>
@@ -234,6 +234,9 @@
                             <svg id="vm-icon-play" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
                             <svg id="vm-icon-pause" viewBox="0 0 24 24" fill="currentColor" style="display:none;"><path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
                         </button>
+                        <button class="btn btn-small" id="vm-btn-queue" type="button" title="Add video to queue" aria-label="Add video to queue">
+                            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M19 11h-6V5h-2v6H5v2h6v6h2v-6h6v-2z"/></svg>
+                        </button>
                         <button class="btn btn-small" id="vm-btn-stop" type="button" title="Stop and remove video">
                             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h12v12H6z"/></svg>
                         </button>
@@ -249,6 +252,14 @@
                         </button>
                     </div>
                 </div>
+            </div>
+
+            <div class="vm-queue-section">
+                <div class="vm-queue-heading">
+                    <h4>Video Queue</h4>
+                    <span id="vm-queue-count">0 videos</span>
+                </div>
+                <div id="vm-queue-list" class="vm-queue-list"></div>
             </div>
         </div>
     </div>
