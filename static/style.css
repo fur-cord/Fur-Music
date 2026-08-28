@@ -693,6 +693,58 @@ body.video-mode-active .video-mode-panel {
     gap: 18px;
 }
 
+.vm-queue-section {
+    border-top: 1px solid rgba(255,255,255,0.1);
+    padding-top: 18px;
+}
+
+.vm-queue-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+}
+
+.vm-queue-heading h4 {
+    font-size: 0.82rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: rgba(255,255,255,0.8);
+}
+
+.vm-queue-heading span {
+    font-size: 0.75rem;
+    color: rgba(255,255,255,0.5);
+}
+
+.vm-queue-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 240px;
+    overflow-y: auto;
+}
+
+.vm-queue-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 58px;
+    padding: 8px 10px;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.04);
+}
+
+.vm-queue-item.current { background: rgba(255,255,255,0.12); box-shadow: inset 2px 0 #fff; }
+.vm-queue-item.error { opacity: 0.62; }
+.vm-queue-thumb { width: 58px; height: 42px; border-radius: 7px; object-fit: cover; background: rgba(255,255,255,0.08); flex-shrink: 0; }
+.vm-queue-copy { min-width: 0; flex: 1; }
+.vm-queue-title { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.86rem; font-weight: 600; }
+.vm-queue-meta { margin-top: 3px; color: rgba(255,255,255,0.55); font-size: 0.74rem; }
+.vm-queue-status { flex-shrink: 0; color: rgba(255,255,255,0.58); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; }
+.vm-queue-empty { padding: 14px 0; color: rgba(255,255,255,0.45); font-size: 0.82rem; text-align: center; }
+
 #vm-player-state:fullscreen,
 #vm-player-state:-webkit-full-screen {
     background: #050506;
