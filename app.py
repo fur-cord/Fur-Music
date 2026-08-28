@@ -287,13 +287,14 @@ def get_video(video_id):
 VIDEO_MODE_CACHE_DIR = "video_mode_cache"
 os.makedirs(VIDEO_MODE_CACHE_DIR, exist_ok=True)
 VIDEO_MODE_STATE_FILE = os.path.join(VIDEO_MODE_CACHE_DIR, "current.json")
+VIDEO_MODE_QUEUE_FILE = os.path.join(VIDEO_MODE_CACHE_DIR, "queue.json")
 
-# In-memory state for the single "currently loaded" Video Mode video.
 video_mode_state = {}
-video_mode_status = {"state": "idle", "error": None}  # idle | downloading | ready | error
+video_mode_queue = []
+video_mode_status = {"state": "idle", "error": None}
 video_mode_lock = threading.Lock()
+video_mode_worker_running = False
 
-# Recover any previously downloaded video on server restart.
 if os.path.exists(VIDEO_MODE_STATE_FILE):
     try:
         with open(VIDEO_MODE_STATE_FILE, 'r') as f:
@@ -301,9 +302,19 @@ if os.path.exists(VIDEO_MODE_STATE_FILE):
         _saved_path = os.path.join(VIDEO_MODE_CACHE_DIR, _saved_state.get('filename', ''))
         if _saved_state and os.path.exists(_saved_path):
             video_mode_state = _saved_state
-            video_mode_status = {"state": "ready", "error": None}
     except Exception:
         video_mode_state = {}
+
+if os.path.exists(VIDEO_MODE_QUEUE_FILE):
+    try:
+        with open(VIDEO_MODE_QUEUE_FILE, 'r') as f:
+            video_mode_queue = json.load(f)
+        video_mode_queue = [item for item in video_mode_queue if isinstance(item, dict)]
+        for item in video_mode_queue:
+            if item.get('status') == 'downloading':
+                item['status'] = 'queued'
+    except Exception:
+        video_mode_queue = []
 
 YOUTUBE_URL_RE = re.compile(
     r'^https?://(www\.)?(youtube\.com/(watch\?v=|shorts/)|youtu\.be/|m\.youtube\.com/watch\?v=)[\w-]+',
@@ -319,40 +330,30 @@ def is_valid_youtube_url(url):
     return bool(YOUTUBE_URL_RE.match(url.strip()))
 
 
-def clear_video_mode_files():
-    """Remove all downloaded/partial Video Mode files, keeping the cache dir."""
-    for f in glob.glob(os.path.join(VIDEO_MODE_CACHE_DIR, "*")):
-        if os.path.basename(f) == "current.json":
-            continue
-        try:
-            os.remove(f)
-        except Exception as e:
-            print(f"Video Mode cleanup: failed to remove {f}: {e}")
-
-
 def save_video_mode_state():
     with open(VIDEO_MODE_STATE_FILE, 'w') as f:
         json.dump(video_mode_state, f, indent=4)
 
 
-def clear_video_mode_state_file():
-    if os.path.exists(VIDEO_MODE_STATE_FILE):
+def save_video_mode_queue():
+    with open(VIDEO_MODE_QUEUE_FILE, 'w') as f:
+        json.dump(video_mode_queue, f, indent=4)
+
+
+def remove_video_file(item):
+    filename = item.get('filename') if item else None
+    if filename:
         try:
-            os.remove(VIDEO_MODE_STATE_FILE)
-        except Exception:
+            os.remove(os.path.join(VIDEO_MODE_CACHE_DIR, filename))
+        except FileNotFoundError:
             pass
+        except Exception as e:
+            print(f"Video Mode cleanup: failed to remove {filename}: {e}")
 
 
-def download_video_mode_task(url):
-    """Runs in a background thread. Downloads a single YouTube video as MP4."""
-    global video_mode_state, video_mode_status
-
-    with video_mode_lock:
-        video_mode_status = {"state": "downloading", "error": None}
-
-    # Only one video lives in Video Mode at a time — clear whatever was here before.
-    clear_video_mode_files()
-
+def download_video_mode_queue():
+    """Download queued videos one at a time without interrupting the current video."""
+    global video_mode_state, video_mode_status, video_mode_worker_running
     ydl_opts = {
         'format': 'bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best[ext=mp4]/best',
         'outtmpl': os.path.join(VIDEO_MODE_CACHE_DIR, '%(id)s.%(ext)s'),
@@ -363,52 +364,66 @@ def download_video_mode_task(url):
         # No cookies / browser session data are read or required.
     }
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-
-        vid_id = info.get('id')
-        if not vid_id or not VIDEO_ID_RE.match(vid_id):
-            raise Exception("Unexpected video id from downloader.")
-
-        final_path = os.path.join(VIDEO_MODE_CACHE_DIR, f"{vid_id}.mp4")
-        if not os.path.exists(final_path):
-            candidates = glob.glob(os.path.join(VIDEO_MODE_CACHE_DIR, f"{vid_id}.*"))
-            if candidates:
-                final_path = candidates[0]
-            else:
-                raise Exception("Download completed but no output file was found.")
-
+    while True:
         with video_mode_lock:
-            video_mode_state = {
-                'id': vid_id,
-                'title': info.get('title') or 'Untitled video',
-                'uploader': info.get('uploader') or '',
-                'thumbnail': info.get('thumbnail') or '',
-                'duration': info.get('duration') or 0,
-                'filename': os.path.basename(final_path)
-            }
-            save_video_mode_state()
-            video_mode_status = {"state": "ready", "error": None}
+            pending = next((item for item in video_mode_queue if item.get('status') == 'queued'), None)
+            if not pending:
+                video_mode_worker_running = False
+                if video_mode_state:
+                    video_mode_status = {"state": "ready", "error": None}
+                else:
+                    video_mode_status = {"state": "idle", "error": None}
+                save_video_mode_queue()
+                return
+            pending['status'] = 'downloading'
+            video_mode_status = {"state": "downloading", "error": None}
+            save_video_mode_queue()
 
-        print(f"Video Mode: downloaded '{video_mode_state['title']}'")
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(pending['url'], download=True)
 
-    except Exception as e:
-        print(f"Video Mode download failed: {e}")
-        clear_video_mode_files()
-        clear_video_mode_state_file()
-        with video_mode_lock:
-            video_mode_state = {}
-            video_mode_status = {
-                "state": "error",
-                "error": "Couldn't download that video. It may be unavailable, "
-                         "private, region-locked, or the link isn't a valid "
-                         "YouTube video URL."
-            }
+            vid_id = info.get('id')
+            if not vid_id or not VIDEO_ID_RE.match(vid_id):
+                raise Exception("Unexpected video id from downloader.")
+
+            final_path = os.path.join(VIDEO_MODE_CACHE_DIR, f"{vid_id}.mp4")
+            if not os.path.exists(final_path):
+                candidates = glob.glob(os.path.join(VIDEO_MODE_CACHE_DIR, f"{vid_id}.*"))
+                if candidates:
+                    final_path = candidates[0]
+                else:
+                    raise Exception("Download completed but no output file was found.")
+
+            with video_mode_lock:
+                pending.update({
+                    'id': vid_id,
+                    'title': info.get('title') or 'Untitled video',
+                    'uploader': info.get('uploader') or '',
+                    'thumbnail': info.get('thumbnail') or '',
+                    'duration': info.get('duration') or 0,
+                    'filename': os.path.basename(final_path),
+                    'status': 'ready',
+                    'error': None
+                })
+                if not video_mode_state:
+                    video_mode_state = dict(pending)
+                    save_video_mode_state()
+                video_mode_status = {"state": "ready", "error": None}
+                save_video_mode_queue()
+            print(f"Video Mode: downloaded '{pending['title']}'")
+        except Exception as e:
+            print(f"Video Mode download failed: {e}")
+            with video_mode_lock:
+                pending['status'] = 'error'
+                pending['error'] = "Couldn't download this video. It may be unavailable or private."
+                video_mode_status = {"state": "error", "error": pending['error']}
+                save_video_mode_queue()
 
 
 @app.route('/api/videomode/import', methods=['POST'])
 def videomode_import():
+    global video_mode_worker_running
     data = request.get_json(silent=True) or {}
     url = (data.get('url') or '').strip()
 
@@ -416,13 +431,19 @@ def videomode_import():
         return jsonify({"error": "Please paste a valid YouTube video URL."}), 400
 
     with video_mode_lock:
-        already_running = video_mode_status.get("state") == "downloading"
-
-    if already_running:
-        return jsonify({"message": "A download is already in progress."})
-
-    threading.Thread(target=download_video_mode_task, args=(url,), daemon=True).start()
-    return jsonify({"message": "Download started."})
+        video_mode_queue.append({
+            'url': url,
+            'title': 'Waiting for metadata...',
+            'uploader': '',
+            'thumbnail': '',
+            'status': 'queued',
+            'error': None
+        })
+        save_video_mode_queue()
+        if not video_mode_worker_running:
+            video_mode_worker_running = True
+            threading.Thread(target=download_video_mode_queue, daemon=True).start()
+    return jsonify({"message": "Video added to queue."})
 
 
 @app.route('/api/videomode/status')
@@ -431,19 +452,33 @@ def videomode_status():
         return jsonify({
             "status": video_mode_status.get("state", "idle"),
             "error": video_mode_status.get("error"),
-            "video": video_mode_state if video_mode_state else None
+            "video": video_mode_state if video_mode_state else None,
+            "queue": video_mode_queue
         })
 
 
 @app.route('/api/videomode/stop', methods=['POST'])
 def videomode_stop():
-    """Stops/closes the current Video Mode video and deletes it from disk."""
+    """Stops the current video, then promotes the next downloaded item."""
     global video_mode_state, video_mode_status
     with video_mode_lock:
-        clear_video_mode_files()
-        clear_video_mode_state_file()
+        if video_mode_state:
+            current_id = video_mode_state.get('id')
+            current = next((item for item in video_mode_queue if item.get('id') == current_id), None)
+            if current:
+                video_mode_queue.remove(current)
+            remove_video_file(video_mode_state)
         video_mode_state = {}
-        video_mode_status = {"state": "idle", "error": None}
+        next_video = next((item for item in video_mode_queue if item.get('status') == 'ready'), None)
+        if next_video:
+            video_mode_state = dict(next_video)
+            save_video_mode_state()
+            video_mode_status = {"state": "ready", "error": None}
+        else:
+            if os.path.exists(VIDEO_MODE_STATE_FILE):
+                os.remove(VIDEO_MODE_STATE_FILE)
+            video_mode_status = {"state": "idle", "error": None}
+        save_video_mode_queue()
     return jsonify({"status": "cleared"})
 
 
@@ -466,8 +501,12 @@ def videomode_file(video_id):
 if __name__ == '__main__':
     print(f"Server ready! Listening on http://localhost:{PORT}")
 
+    if any(item.get('status') == 'queued' for item in video_mode_queue):
+        video_mode_worker_running = True
+        threading.Thread(target=download_video_mode_queue, daemon=True).start()
+
     env_url = os.getenv("YOUTUBE_PLAYLIST_URL")
-    if env_url:
+    if env_url and "YOUR_PLAYLIST_HERE" not in env_url:
         threading.Thread(target=sync_playlist_task, args=(env_url,), daemon=True).start()
 
     app.run(host='0.0.0.0', port=PORT, debug=True, use_reloader=False)
