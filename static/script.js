@@ -596,6 +596,9 @@ setViewMode(localStorage.getItem(viewModeKey) || 'music');
     const btnVmFullscreen = document.getElementById('vm-btn-fullscreen');
     const vmIconFsEnter = document.getElementById('vm-icon-fs-enter');
     const vmIconFsExit = document.getElementById('vm-icon-fs-exit');
+    const btnVmPip = document.getElementById('vm-btn-pip');
+    const vmIconPipEnter = document.getElementById('vm-icon-pip-enter');
+    const vmIconPipExit = document.getElementById('vm-icon-pip-exit');
 
     let vmPollTimer = null;
 
@@ -672,6 +675,10 @@ setViewMode(localStorage.getItem(viewModeKey) || 'music');
         vmVideo.removeAttribute('src');
         vmVideo.load();
         vmStopPolling();
+
+        if (document.pictureInPictureElement === vmVideo && document.exitPictureInPicture) {
+            try { await document.exitPictureInPicture(); } catch (e) { /* ignore */ }
+        }
 
         if (vmIsFullscreen()) {
             try {
@@ -770,9 +777,43 @@ setViewMode(localStorage.getItem(viewModeKey) || 'music');
         }
     }
 
+    function vmIsPip() {
+        return document.pictureInPictureElement === vmVideo;
+    }
+
+    function vmSetPipIcon() {
+        const active = vmIsPip();
+        if (vmIconPipEnter) vmIconPipEnter.style.display = active ? 'none' : 'block';
+        if (vmIconPipExit) vmIconPipExit.style.display = active ? 'block' : 'none';
+        if (btnVmPip) {
+            btnVmPip.setAttribute('aria-pressed', String(active));
+            btnVmPip.title = active ? 'Exit pop-out video' : 'Pop out video';
+        }
+    }
+
+    async function vmTogglePip() {
+        if (!vmVideo.getAttribute('src')) return;
+
+        try {
+            if (vmIsPip()) {
+                if (document.exitPictureInPicture) await document.exitPictureInPicture();
+            } else if (vmVideo.requestPictureInPicture) {
+                await vmVideo.requestPictureInPicture();
+            } else {
+                await vmToggleFullscreen();
+            }
+        } catch (e) {
+            console.error('Pop-out toggle failed', e);
+        }
+    }
+
     if (btnVmFullscreen) btnVmFullscreen.addEventListener('click', vmToggleFullscreen);
+    if (btnVmPip) btnVmPip.addEventListener('click', vmTogglePip);
     document.addEventListener('fullscreenchange', vmSetFullscreenIcon);
     document.addEventListener('webkitfullscreenchange', vmSetFullscreenIcon);
+    vmVideo.addEventListener('enterpictureinpicture', vmSetPipIcon);
+    vmVideo.addEventListener('leavepictureinpicture', vmSetPipIcon);
+    vmSetPipIcon();
 
     if (btnVmImportSubmit) {
         btnVmImportSubmit.onclick = async () => {
