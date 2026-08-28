@@ -602,6 +602,8 @@ body.video-mode-active .video-mode-panel {
 }
 
 .vm-video-wrapper {
+    position: relative;
+    isolation: isolate;
     width: 100%;
     aspect-ratio: 16 / 9;
     max-height: 68vh;
@@ -618,6 +620,26 @@ body.video-mode-active .video-mode-panel {
     display: block;
     object-fit: contain;
     background: #09090a;
+}
+
+.vm-pip-btn {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    right: auto;
+    z-index: 10;
+    pointer-events: auto;
+    transform: translateX(-50%);
+    width: 38px;
+    height: 38px;
+    border-radius: 8px;
+    background: rgba(0, 0, 0, 0.62);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+
+.vm-pip-btn:hover {
+    background: rgba(0, 0, 0, 0.82);
 }
 
 .vm-info {
