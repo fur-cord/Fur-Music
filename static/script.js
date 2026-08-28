@@ -576,6 +576,8 @@ setViewMode(localStorage.getItem(viewModeKey) || 'music');
     const vmErrorText = document.getElementById('vm-error-text');
     const vmTitle = document.getElementById('vm-title');
     const vmUploader = document.getElementById('vm-uploader');
+    const vmQueueList = document.getElementById('vm-queue-list');
+    const vmQueueCount = document.getElementById('vm-queue-count');
     const vmTimeCur = document.getElementById('vm-time-current');
     const vmTimeTot = document.getElementById('vm-time-total');
     const vmProgressFill = document.getElementById('vm-progress-fill');
@@ -590,6 +592,7 @@ setViewMode(localStorage.getItem(viewModeKey) || 'music');
     const btnVmImportSubmit = document.getElementById('btn-vm-import-submit');
     const btnVmRetry = document.getElementById('btn-vm-retry');
     const btnVmPlay = document.getElementById('vm-btn-play');
+    const btnVmQueue = document.getElementById('vm-btn-queue');
     const btnVmStop = document.getElementById('vm-btn-stop');
     const btnVmMute = document.getElementById('vm-btn-mute');
     const vmVolSlider = document.getElementById('vm-vol-slider');
@@ -620,6 +623,47 @@ setViewMode(localStorage.getItem(viewModeKey) || 'music');
         if (vmUploader) vmUploader.innerText = video.uploader || '';
     }
 
+    function vmRenderQueue(queue, currentVideo) {
+        if (!vmQueueList) return;
+        const items = Array.isArray(queue) ? queue : [];
+        vmQueueList.innerHTML = '';
+        if (vmQueueCount) vmQueueCount.innerText = `${items.length} ${items.length === 1 ? 'video' : 'videos'}`;
+        if (items.length === 0) {
+            vmQueueList.innerHTML = '<div class="vm-queue-empty">Your video queue is empty.</div>';
+            return;
+        }
+
+        items.forEach((item) => {
+            const row = document.createElement('div');
+            row.className = `vm-queue-item ${currentVideo && item.id === currentVideo.id ? 'current' : ''} ${item.status === 'error' ? 'error' : ''}`;
+            const thumb = document.createElement('img');
+            thumb.className = 'vm-queue-thumb';
+            thumb.src = item.thumbnail || '';
+            thumb.alt = '';
+            row.appendChild(thumb);
+
+            const copy = document.createElement('div');
+            copy.className = 'vm-queue-copy';
+            const title = document.createElement('div');
+            title.className = 'vm-queue-title';
+            title.innerText = item.title || item.url || 'Untitled video';
+            const meta = document.createElement('div');
+            meta.className = 'vm-queue-meta';
+            meta.innerText = item.uploader || (item.id ? 'Ready to watch' : 'Waiting for metadata');
+            copy.append(title, meta);
+            row.appendChild(copy);
+
+            const status = document.createElement('span');
+            status.className = 'vm-queue-status';
+            status.innerText = item.id === (currentVideo && currentVideo.id) ? 'Playing' :
+                item.status === 'downloading' ? 'Downloading' :
+                item.status === 'ready' ? 'Ready' :
+                item.status === 'error' ? 'Failed' : 'Queued';
+            row.appendChild(status);
+            vmQueueList.appendChild(row);
+        });
+    }
+
     function vmStopPolling() {
         if (vmPollTimer) {
             clearInterval(vmPollTimer);
@@ -630,11 +674,7 @@ setViewMode(localStorage.getItem(viewModeKey) || 'music');
     function vmStartPolling() {
         vmStopPolling();
         vmPollTimer = setInterval(async () => {
-            const data = await vmRefreshStatus(false);
-            if (data && data.status !== 'downloading') {
-                vmStopPolling();
-                if (data.status === 'ready' && data.video) vmLoadVideo(data.video);
-            }
+            await vmRefreshStatus(true);
         }, 2000);
     }
 
@@ -643,7 +683,11 @@ setViewMode(localStorage.getItem(viewModeKey) || 'music');
             const res = await fetch('/api/videomode/status');
             const data = await res.json();
 
-            if (data.status === 'downloading') {
+            vmRenderQueue(data.queue, data.video);
+            if (data.video) {
+                vmLoadVideo(data.video);
+                vmShowState('player');
+            } else if (data.status === 'downloading') {
                 vmShowState('loading');
             } else if (data.status === 'error') {
                 if (vmErrorText) vmErrorText.innerText = data.error || 'Something went wrong.';
@@ -693,7 +737,9 @@ setViewMode(localStorage.getItem(viewModeKey) || 'music');
             console.error('Failed to clean up Video Mode file', e);
         }
 
-        vmShowState('import');
+        const nextData = await vmRefreshStatus(true);
+        if (nextData && nextData.status === 'downloading' && !nextData.video) vmShowState('loading');
+        vmStartPolling();
     }
 
     vmVideo.addEventListener('play', () => {
@@ -717,6 +763,7 @@ setViewMode(localStorage.getItem(viewModeKey) || 'music');
             vmShowState('error');
         }
     });
+    vmVideo.addEventListener('ended', vmStopVideo);
 
     if (vmProgressBox) {
         vmProgressBox.addEventListener('click', (e) => {
@@ -743,6 +790,10 @@ setViewMode(localStorage.getItem(viewModeKey) || 'music');
     }
 
     if (btnVmImportOpen) btnVmImportOpen.onclick = () => { vmImportModal.style.display = 'flex'; };
+    if (btnVmQueue) btnVmQueue.onclick = () => {
+        vmImportModal.style.display = 'flex';
+        if (vmImportUrl) vmImportUrl.focus();
+    };
     if (btnVmImportCancel) btnVmImportCancel.onclick = () => { vmImportModal.style.display = 'none'; };
     if (btnVmRetry) btnVmRetry.onclick = () => vmShowState('import');
 
@@ -835,7 +886,7 @@ setViewMode(localStorage.getItem(viewModeKey) || 'music');
                     if (vmErrorText) vmErrorText.innerText = data.error || 'Could not start download.';
                     vmShowState('error');
                 } else {
-                    vmShowState('loading');
+                    await vmRefreshStatus(true);
                     vmStartPolling();
                 }
             } catch (e) {
@@ -846,7 +897,7 @@ setViewMode(localStorage.getItem(viewModeKey) || 'music');
             vmImportModal.style.display = 'none';
             vmImportUrl.value = '';
             btnVmImportSubmit.disabled = false;
-            btnVmImportSubmit.innerText = 'Download & Play';
+            btnVmImportSubmit.innerText = 'Add to Queue';
         };
     }
 (function initFullscreenAutoHide() {
@@ -903,4 +954,5 @@ setViewMode(localStorage.getItem(viewModeKey) || 'music');
 })();
 
     vmRefreshStatus();
+    vmStartPolling();
 })();
