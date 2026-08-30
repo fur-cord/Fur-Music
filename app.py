@@ -8,6 +8,7 @@ import threading
 import time
 import re
 import glob
+import requests
 from flask import Flask, render_template, jsonify, send_file, request
 from dotenv import load_dotenv
 import yt_dlp
@@ -276,14 +277,40 @@ def get_video(video_id):
     if os.path.exists(path):
         return send_file(path, mimetype="video/mp4")
     return "Not found", 404
+CHANGELOG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "changelog.txt")
+CHANGELOG_RAW_URL = os.getenv(
+    "CHANGELOG_URL",
+    "https://raw.githubusercontent.com/katt-dev/Katt-Music/main/changelog.txt"
+)
+_changelog_cache = {"content": None, "fetched_at": 0}
+CHANGELOG_CACHE_TTL = 300  # seconds
 
+@app.route('/api/changelog')
+def get_changelog():
+    now = time.time()
+    if _changelog_cache["content"] is not None and (now - _changelog_cache["fetched_at"]) < CHANGELOG_CACHE_TTL:
+        return jsonify({"content": _changelog_cache["content"]})
 
-# =====================================================================
-# VIDEO MODE — additive, isolated feature. Does not touch anything above.
-# Watches a single standalone YouTube video (downloaded as MP4 via
-# yt-dlp), independent from the music library/playback logic.
-# =====================================================================
+    try:
+        resp = requests.get(CHANGELOG_RAW_URL, timeout=5)
+        resp.raise_for_status()
+        content = resp.text
+        _changelog_cache["content"] = content
+        _changelog_cache["fetched_at"] = now
+        return jsonify({"content": content})
+    except Exception as e:
+        print(f"Changelog fetch from GitHub failed: {e}")
 
+    if os.path.exists(CHANGELOG_FILE):
+        try:
+            with open(CHANGELOG_FILE, 'r', encoding='utf-8') as f:
+                return jsonify({"content": f.read()})
+        except Exception as e:
+            print(f"Changelog local read failed: {e}")
+
+    if _changelog_cache["content"] is not None:
+        return jsonify({"content": _changelog_cache["content"]})
+    return jsonify({"content": "Changelog is currently unavailable."}), 200
 VIDEO_MODE_CACHE_DIR = "video_mode_cache"
 os.makedirs(VIDEO_MODE_CACHE_DIR, exist_ok=True)
 VIDEO_MODE_STATE_FILE = os.path.join(VIDEO_MODE_CACHE_DIR, "current.json")
