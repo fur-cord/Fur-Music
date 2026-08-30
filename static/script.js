@@ -956,3 +956,26 @@ setViewMode(localStorage.getItem(viewModeKey) || 'music');
     vmRefreshStatus();
     vmStartPolling();
 })();
+const changelogModal = document.getElementById('changelog-modal');
+const changelogText = document.getElementById('changelog-text');
+const btnChangelogClose = document.getElementById('btn-changelog-close');
+
+async function showChangelog() {
+    if (!changelogModal) return;
+    changelogModal.style.display = 'flex';
+    try {
+        const res = await fetch('/api/changelog');
+        const data = await res.json();
+        changelogText.innerText = data.content || 'No changelog available.';
+    } catch (e) {
+        changelogText.innerText = 'Could not load changelog.';
+    }
+}
+
+if (btnChangelogClose) {
+    btnChangelogClose.onclick = () => {
+        changelogModal.style.display = 'none';
+    };
+}
+
+showChangelog();
