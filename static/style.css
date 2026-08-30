@@ -802,3 +802,51 @@ body.video-mode-active .video-mode-panel {
     max-width: 900px;
     margin: 0 auto;
 }
+
+/* =====================================================================
+   CHANGELOG MODAL
+   Reuses .modal-overlay (already has backdrop-filter: blur(8px)) for
+   the blurred background behind the modal.
+   ===================================================================== */
+
+.changelog-content {
+    position: relative;
+    max-height: 70vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.changelog-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: rgba(255,255,255,0.08);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    cursor: pointer;
+    transition: 0.2s ease;
+}
+.changelog-close:hover {
+    background: rgba(255,255,255,0.18);
+}
+
+.changelog-content h3 {
+    text-shadow: 0 0 12px rgba(255,255,255,0.55), 0 0 2px rgba(255,255,255,0.4);
+}
+
+.changelog-text {
+    white-space: pre-wrap;
+    font-size: 0.88rem;
+    line-height: 1.5;
+    color: rgba(255,255,255,0.92);
+    text-shadow: 0 0 8px rgba(255,255,255,0.25);
+    overflow-y: auto;
+    margin-top: 10px;
+    padding-right: 6px;
+}
