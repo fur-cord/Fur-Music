@@ -802,13 +802,6 @@ body.video-mode-active .video-mode-panel {
     max-width: 900px;
     margin: 0 auto;
 }
-
-/* =====================================================================
-   CHANGELOG MODAL
-   Reuses .modal-overlay (already has backdrop-filter: blur(8px)) for
-   the blurred background behind the modal.
-   ===================================================================== */
-
 .changelog-content {
     position: relative;
     max-height: 70vh;
