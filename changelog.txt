@@ -1,3 +1,4 @@
-V1.4.3
-Fur-Cord Rebrand
+V1.4.5
++ Added branding logo
++ Fixed auto-updates
 Made with 💜 by Fur-Cord
