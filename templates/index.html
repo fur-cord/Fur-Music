@@ -6,7 +6,7 @@
     <title>Fur-Music</title>
     <link rel="icon" type="image/png" href="/static/icon.png">
     <link rel="stylesheet" href="/static/style.css">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@700&family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
 </head>
 <body class="static-mode">
     <div id="app-background" class="bg-layer active"></div>
@@ -128,6 +128,14 @@
 
     <div class="container">
         <div class="glass-panel main-player music-view">
+            <div class="player-logo">
+                <svg class="player-logo-ears" viewBox="0 0 100 60">
+                    <path class="player-logo-ear player-logo-ear-left" d="M10 50 L30 10 L50 50" />
+                    <path class="player-logo-ear player-logo-ear-right" d="M50 50 L70 10 L90 50" />
+                </svg>
+                <h1 class="player-logo-wordmark"><span class="lw-fur">Fur</span><span class="lw-cord">Cord</span></h1>
+            </div>
+
             <div class="artwork-wrapper">
                 <img id="artwork" src="" alt="Album Art">
             </div>
