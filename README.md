@@ -16,4 +16,4 @@ To have Fur-Music launch silently in the background every time you turn on your 
 3. **Move the Shortcut:** Drag and drop that newly created shortcut into the Windows Startup folder you just opened. 
 
 ---
-*Made with 💜 by Katt-Dev*
+*Made with 💜 by Fur-cord*
