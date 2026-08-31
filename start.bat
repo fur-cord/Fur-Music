@@ -23,7 +23,7 @@ echo.
 if not exist .git (
     echo Initializing Git repository for updates...
     git init
-    git remote add origin https://github.com/katt-dev/Katt-Music.git
+    git remote add origin https://github.com/fur-cord/Fur-Music.git
     git branch -M main
 )
 
