@@ -1,2 +1,2 @@
-V1.4.1
-Added changelogs
+V1.4.1.1
+Fix discord rpc
