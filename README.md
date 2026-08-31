@@ -17,3 +17,4 @@ To have Fur-Music launch silently in the background every time you turn on your 
 
 ---
 *Made with 💜 by Fur-Cord*
+<img width="500" height="500" alt="icon-removebg-preview" src="https://github.com/user-attachments/assets/e7f817c8-c848-471d-be47-9b52473d6667" />
