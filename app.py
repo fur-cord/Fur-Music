@@ -251,7 +251,7 @@ def update_rpc():
             }
 
         activity['buttons'] = [
-            {"label": "View on GitHub", "url": "https://github.com/your-username/your-repo"}
+            {"label": "View on GitHub", "url": "https://github.com/katt-dev/Katt-Music"}
         ]
 
         discord_ipc.set_activity(activity)
