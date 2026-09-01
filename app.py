@@ -12,6 +12,7 @@ import requests
 from flask import Flask, render_template, jsonify, send_file, request
 from dotenv import load_dotenv
 import yt_dlp
+from spotdl import Spotdl
 
 load_dotenv()
 
@@ -20,9 +21,24 @@ PORT = int(os.getenv("PORT", 8000))
 CACHE_DIR = "music_cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
 LIB_FILE = os.path.join(CACHE_DIR, "library.json")
+SPOTIFY_MAP_FILE = os.path.join(CACHE_DIR, "spotify_map.json")
 
 library_data = []
 is_syncing = False
+library_lock = threading.Lock()
+
+spotify_map = {}
+is_spotify_syncing = False
+spotify_import_status = {
+    "active": False,
+    "done": True,
+    "source_name": None,
+    "total": 0,
+    "completed": 0,
+    "current": None,
+    "failed": [],
+    "error": None
+}
 
 if os.path.exists(LIB_FILE):
     with open(LIB_FILE, 'r') as f:
@@ -30,6 +46,13 @@ if os.path.exists(LIB_FILE):
             library_data = json.load(f)
         except:
             library_data = []
+
+if os.path.exists(SPOTIFY_MAP_FILE):
+    with open(SPOTIFY_MAP_FILE, 'r') as f:
+        try:
+            spotify_map = json.load(f)
+        except:
+            spotify_map = {}
 
 class MinimalDiscordIPC:
     def __init__(self, client_id):
@@ -101,8 +124,87 @@ class MinimalDiscordIPC:
 
 discord_ipc = None
 
+def save_library():
+    with open(LIB_FILE, 'w') as f:
+        json.dump(library_data, f, indent=4)
+
+
+def save_spotify_map():
+    with open(SPOTIFY_MAP_FILE, 'w') as f:
+        json.dump(spotify_map, f, indent=4)
+
+
+def is_in_library(vid):
+    with library_lock:
+        return any(item.get('id') == vid for item in library_data)
+
+
+def add_to_library(item_data):
+    """Appends an item to the shared library/cache, guarding against a
+    duplicate slipping in from a concurrent import (YouTube + Spotify can
+    run at the same time)."""
+    with library_lock:
+        if any(item.get('id') == item_data.get('id') for item in library_data):
+            return False
+        library_data.append(item_data)
+        save_library()
+        return True
+
+
+def download_youtube_track(vid):
+    """Downloads (audio + best-effort muted video) for a single YouTube
+    video ID using the existing yt-dlp pipeline, and returns the resulting
+    library item dict WITHOUT adding it to the library. Returns None if the
+    audio download fails. Shared by the YouTube playlist importer and the
+    Spotify importer so both feed the exact same local cache."""
+    dl_opts = {
+        'format': 'bestaudio/best',
+        'outtmpl': os.path.join(CACHE_DIR, f'{vid}.%(ext)s'),
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+        'quiet': True,
+        'no_warnings': True
+    }
+
+    dl_info = None
+    try:
+        with yt_dlp.YoutubeDL(dl_opts) as ydl_dl:
+            dl_info = ydl_dl.extract_info(vid, download=True)
+    except Exception as e:
+        print(f"Failed to download audio for {vid}: {e}")
+        return None
+
+    has_video = False
+    video_dl_opts = {
+        'format': 'bestvideo[ext=mp4][height<=720]/best[ext=mp4]/best',
+        'outtmpl': os.path.join(CACHE_DIR, f'{vid}_video.%(ext)s'),
+        'merge_output_format': 'mp4',
+        'quiet': True,
+        'no_warnings': True
+    }
+    try:
+        with yt_dlp.YoutubeDL(video_dl_opts) as ydl_vid:
+            ydl_vid.extract_info(vid, download=True)
+        video_path = os.path.join(CACHE_DIR, f'{vid}_video.mp4')
+        has_video = os.path.exists(video_path)
+    except Exception as e:
+        print(f"Video download skipped for {vid}: {e}")
+
+    return {
+        'id': vid,
+        'title': dl_info.get('title'),
+        'artist': dl_info.get('uploader'),
+        'thumbnail': dl_info.get('thumbnail'),
+        'duration': dl_info.get('duration'),
+        'has_video': has_video
+    }
+
+
 def sync_playlist_task(playlist_url):
-    global library_data, is_syncing
+    global is_syncing
     is_syncing = True
     print(f"Fetching playlist metadata from: {playlist_url}")
 
@@ -122,64 +224,15 @@ def sync_playlist_task(playlist_url):
         if not entry: continue
         vid = entry.get('id')
 
-        if any(item.get('id') == vid for item in library_data):
+        if is_in_library(vid):
             continue
 
         print(f"Downloading audio: {entry.get('title')}...")
-        dl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': os.path.join(CACHE_DIR, f'{vid}.%(ext)s'),
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'quiet': True,
-            'no_warnings': True
-        }
-
-        audio_ok = False
-        dl_info = None
-        try:
-            with yt_dlp.YoutubeDL(dl_opts) as ydl_dl:
-                dl_info = ydl_dl.extract_info(vid, download=True)
-            audio_ok = True
-        except Exception as e:
-            print(f"Failed to download audio for {vid}: {e}")
+        item_data = download_youtube_track(vid)
+        if not item_data:
             continue
 
-        # Also grab a (muted, low-weight) video file so the inline
-        # video-wrapper / animated background has something real to play.
-        # This is independent of the audio download above and best-effort:
-        # if it fails, the song still stays in the library, just without video.
-        has_video = False
-        video_dl_opts = {
-            'format': 'bestvideo[ext=mp4][height<=720]/best[ext=mp4]/best',
-            'outtmpl': os.path.join(CACHE_DIR, f'{vid}_video.%(ext)s'),
-            'merge_output_format': 'mp4',
-            'quiet': True,
-            'no_warnings': True
-        }
-        try:
-            with yt_dlp.YoutubeDL(video_dl_opts) as ydl_vid:
-                ydl_vid.extract_info(vid, download=True)
-            video_path = os.path.join(CACHE_DIR, f'{vid}_video.mp4')
-            has_video = os.path.exists(video_path)
-        except Exception as e:
-            print(f"Video download skipped for {vid}: {e}")
-
-        item_data = {
-            'id': vid,
-            'title': dl_info.get('title'),
-            'artist': dl_info.get('uploader'),
-            'thumbnail': dl_info.get('thumbnail'),
-            'duration': dl_info.get('duration'),
-            'has_video': has_video
-        }
-
-        library_data.append(item_data)
-        with open(LIB_FILE, 'w') as f:
-            json.dump(library_data, f, indent=4)
+        add_to_library(item_data)
 
     is_syncing = False
     print("Playlist sync complete!")
@@ -206,6 +259,118 @@ def import_playlist():
         threading.Thread(target=sync_playlist_task, args=(url,), daemon=True).start()
         return jsonify({"message": "Import started in background."})
     return jsonify({"message": "Already syncing."})
+
+YOUTUBE_ID_FROM_URL_RE = re.compile(r'(?:v=|youtu\.be/|shorts/)([\w-]{11})')
+
+
+def extract_youtube_id(url):
+    if not url:
+        return None
+    m = YOUTUBE_ID_FROM_URL_RE.search(url)
+    return m.group(1) if m else None
+
+
+def spotify_sync_task(spotify_url):
+    global is_spotify_syncing, spotify_import_status
+    is_spotify_syncing = True
+    spotify_import_status = {
+        "active": True, "done": False, "source_name": None,
+        "total": 0, "completed": 0, "current": None, "failed": [], "error": None
+    }
+
+    client_id = os.getenv("SPOTIFY_CLIENT_ID")
+    client_secret = os.getenv("SPOTIFY_CLIENT_SECRET")
+
+    try:
+        client = Spotdl(client_id=client_id, client_secret=client_secret, no_cache=True)
+        songs = client.search([spotify_url])
+    except Exception as e:
+        print(f"Spotify metadata fetch failed: {e}")
+        spotify_import_status.update({"active": False, "done": True, "error": "Couldn't load that from Spotify. Check the link, or the SPOTIFY_CLIENT_ID / SPOTIFY_CLIENT_SECRET in .env."})
+        is_spotify_syncing = False
+        return
+
+    if not songs:
+        spotify_import_status.update({"active": False, "done": True, "error": "That Spotify link didn't return any tracks."})
+        is_spotify_syncing = False
+        return
+
+    source_name = getattr(songs[0], "list_name", None) or songs[0].name
+    spotify_import_status["source_name"] = source_name
+    spotify_import_status["total"] = len(songs)
+    print(f"Spotify import: '{source_name}' - {len(songs)} track(s). Matching against YouTube via spotdl...")
+
+    for song in songs:
+        artist_str = getattr(song, "artist", None) or ", ".join(getattr(song, "artists", None) or [])
+        display_name = f"{artist_str} - {song.name}" if artist_str else song.name
+        spotify_import_status["current"] = display_name
+
+        sp_id = getattr(song, "song_id", None)
+        vid = spotify_map.get(sp_id) if sp_id else None
+
+        if not vid:
+            try:
+                yt_url = client.downloader.search(song)
+            except Exception as e:
+                print(f"spotdl YouTube search failed for '{display_name}': {e}")
+                yt_url = None
+            vid = extract_youtube_id(yt_url)
+            if vid and sp_id:
+                spotify_map[sp_id] = vid
+                save_spotify_map()
+
+        if not vid:
+            print(f"No YouTube match for: {display_name}")
+            spotify_import_status["failed"].append({"title": song.name, "artist": artist_str})
+            spotify_import_status["completed"] += 1
+            continue
+
+        if not is_in_library(vid):
+            item_data = download_youtube_track(vid)
+            if not item_data:
+                spotify_import_status["failed"].append({"title": song.name, "artist": artist_str})
+                spotify_import_status["completed"] += 1
+                continue
+
+            item_data['title'] = song.name or item_data['title']
+            item_data['artist'] = artist_str or item_data['artist']
+            item_data['album'] = getattr(song, "album_name", None)
+            if getattr(song, "cover_url", None):
+                item_data['thumbnail'] = song.cover_url
+            item_data['source'] = 'spotify'
+
+            add_to_library(item_data)
+
+        spotify_import_status["completed"] += 1
+
+    spotify_import_status["active"] = False
+    spotify_import_status["done"] = True
+    is_spotify_syncing = False
+    print("Spotify import complete!")
+
+
+@app.route('/api/import/spotify', methods=['POST'])
+def import_spotify():
+    global is_spotify_syncing
+    data = request.get_json(silent=True) or {}
+    url = (data.get('url') or '').strip()
+
+    if not url:
+        return jsonify({"error": "No URL provided"}), 400
+    if len(url) > 500 or 'spotify.com' not in url.lower():
+        return jsonify({"error": "Please paste a valid Spotify track, album, or playlist link."}), 400
+    if not os.getenv("SPOTIFY_CLIENT_ID") or not os.getenv("SPOTIFY_CLIENT_SECRET"):
+        return jsonify({"error": "Spotify isn't configured on this server yet. Add SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET to .env."}), 400
+
+    if not is_spotify_syncing:
+        threading.Thread(target=spotify_sync_task, args=(url,), daemon=True).start()
+        return jsonify({"message": "Spotify import started in background."})
+    return jsonify({"message": "Already importing a Spotify link."})
+
+
+@app.route('/api/import/spotify/status')
+def get_spotify_import_status():
+    return jsonify(spotify_import_status)
 
 @app.route('/api/rpc', methods=['POST'])
 def update_rpc():
@@ -388,7 +553,6 @@ def download_video_mode_queue():
         'noplaylist': True,
         'quiet': True,
         'no_warnings': True,
-        # No cookies / browser session data are read or required.
     }
 
     while True:
