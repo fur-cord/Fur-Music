@@ -108,7 +108,6 @@ const btnShuffle = document.getElementById('btn-shuffle');
 
 const modal = document.getElementById('import-modal');
 const inputUrl = document.getElementById('import-url');
-const btnImportOpen = document.getElementById('btn-import-open');
 const btnImportCancel = document.getElementById('btn-import-cancel');
 const btnImportSubmit = document.getElementById('btn-import-submit');
 
@@ -465,7 +464,6 @@ window.addEventListener('resize', handlePageRecovery);
 document.addEventListener('fullscreenchange', handlePageRecovery);
 window.addEventListener('focus', handlePageRecovery);
 
-if (btnImportOpen) btnImportOpen.onclick = () => modal.style.display = 'flex';
 if (btnImportCancel) btnImportCancel.onclick = () => modal.style.display = 'none';
 
 if (btnRpcOpen) btnRpcOpen.onclick = () => rpcModal.style.display = 'flex';
@@ -516,6 +514,194 @@ setInterval(async () => {
 }, 3000);
 
 init();
+
+(function initImportSourceDropdown() {
+    const btnImportOpen = document.getElementById('btn-import-open');
+    const sourcePanel = document.getElementById('import-source-panel');
+    const btnSourceYoutube = document.getElementById('btn-import-source-youtube');
+    const btnSourceSpotify = document.getElementById('btn-import-source-spotify');
+    if (!btnImportOpen || !sourcePanel) return;
+
+    function closePanel() {
+        sourcePanel.style.display = 'none';
+        btnImportOpen.setAttribute('aria-expanded', 'false');
+    }
+
+    btnImportOpen.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isOpen = sourcePanel.style.display === 'flex';
+        sourcePanel.style.display = isOpen ? 'none' : 'flex';
+        btnImportOpen.setAttribute('aria-expanded', String(!isOpen));
+    });
+
+    document.addEventListener('click', (e) => {
+        if (sourcePanel.style.display !== 'flex') return;
+        if (sourcePanel.contains(e.target) || btnImportOpen.contains(e.target)) return;
+        closePanel();
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closePanel();
+    });
+
+    if (btnSourceYoutube) {
+        btnSourceYoutube.addEventListener('click', () => {
+            closePanel();
+            if (modal) modal.style.display = 'flex';
+        });
+    }
+
+    if (btnSourceSpotify) {
+        btnSourceSpotify.addEventListener('click', () => {
+            closePanel();
+            openSpotifyImportModal();
+        });
+    }
+})();
+
+function openSpotifyImportModal() {
+    const spotifyModal = document.getElementById('spotify-import-modal');
+    if (!spotifyModal) return;
+
+    const form = document.getElementById('spotify-import-form');
+    const progress = document.getElementById('spotify-import-progress');
+    const urlInput = document.getElementById('spotify-import-url');
+    const errorBox = document.getElementById('spotify-import-error');
+    const failedBox = document.getElementById('spotify-import-failed');
+
+    form.hidden = false;
+    progress.hidden = true;
+    errorBox.hidden = true;
+    failedBox.hidden = true;
+    urlInput.value = '';
+
+    spotifyModal.style.display = 'flex';
+}
+
+(function initSpotifyImport() {
+    const spotifyModal = document.getElementById('spotify-import-modal');
+    if (!spotifyModal) return;
+
+    const form = document.getElementById('spotify-import-form');
+    const progress = document.getElementById('spotify-import-progress');
+    const urlInput = document.getElementById('spotify-import-url');
+    const btnCancel = document.getElementById('btn-spotify-import-cancel');
+    const btnSubmit = document.getElementById('btn-spotify-import-submit');
+    const btnDone = document.getElementById('btn-spotify-import-done');
+    const headline = document.getElementById('spotify-import-headline');
+    const currentTrack = document.getElementById('spotify-import-current');
+    const spinner = document.getElementById('spotify-import-spinner');
+    const errorBox = document.getElementById('spotify-import-error');
+    const failedBox = document.getElementById('spotify-import-failed');
+    const failedList = document.getElementById('spotify-import-failed-list');
+
+    let pollTimer = null;
+
+    function stopPolling() {
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = null;
+    }
+
+    function closeModal() {
+        stopPolling();
+        spotifyModal.style.display = 'none';
+    }
+
+    function renderFailed(failed) {
+        if (!Array.isArray(failed) || failed.length === 0) {
+            failedBox.hidden = true;
+            return;
+        }
+        failedBox.hidden = false;
+        failedList.innerHTML = '';
+        failed.forEach((f) => {
+            const row = document.createElement('div');
+            row.className = 'spotify-import-failed-item';
+            row.textContent = f.artist ? `${f.artist} - ${f.title}` : (f.title || 'Unknown track');
+            failedList.appendChild(row);
+        });
+    }
+
+    async function pollStatus() {
+        try {
+            const res = await fetch('/api/import/spotify/status');
+            const status = await res.json();
+
+            if (status.error) {
+                spinner.style.display = 'none';
+                errorBox.hidden = false;
+                errorBox.textContent = status.error;
+                headline.textContent = 'Import failed';
+                currentTrack.textContent = '';
+                stopPolling();
+                return;
+            }
+
+            const total = status.total || 0;
+            const completed = status.completed || 0;
+            headline.textContent = total > 0
+                ? `Importing ${status.source_name || 'playlist'}\u2026 (${completed}/${total})`
+                : 'Reading playlist from Spotify\u2026';
+            currentTrack.textContent = status.current ? `Matching: ${status.current}` : '';
+
+            renderFailed(status.failed);
+
+            if (status.done) {
+                spinner.style.display = 'none';
+                headline.textContent = total > 0
+                    ? `Imported ${status.source_name || 'playlist'} (${completed - (status.failed || []).length}/${total} matched)`
+                    : 'Import complete';
+                currentTrack.textContent = '';
+                stopPolling();
+            }
+        } catch (e) {
+            console.error('Spotify import status poll failed:', e);
+        }
+    }
+
+    if (btnCancel) btnCancel.onclick = closeModal;
+    if (btnDone) btnDone.onclick = closeModal;
+
+    if (btnSubmit) {
+        btnSubmit.onclick = async () => {
+            const url = urlInput.value.trim();
+            if (!url) return;
+
+            try {
+                const res = await fetch('/api/import/spotify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
+                const data = await res.json();
+
+                if (!res.ok) {
+                    form.hidden = false;
+                    progress.hidden = true;
+                    errorBox.hidden = false;
+                    errorBox.textContent = data.error || 'Something went wrong starting the import.';
+                    return;
+                }
+            } catch (e) {
+                errorBox.hidden = false;
+                errorBox.textContent = 'Could not reach the server.';
+                return;
+            }
+
+            form.hidden = true;
+            progress.hidden = false;
+            spinner.style.display = '';
+            errorBox.hidden = true;
+            failedBox.hidden = true;
+            headline.textContent = 'Reading playlist from Spotify\u2026';
+            currentTrack.textContent = '';
+
+            stopPolling();
+            pollStatus();
+            pollTimer = setInterval(pollStatus, 1500);
+        };
+    }
+})();
 
 (function initSettingsDropdown() {
     const btnSettingsOpen = document.getElementById('btn-settings-open');
