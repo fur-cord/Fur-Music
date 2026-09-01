@@ -21,7 +21,18 @@ If Not fso.FolderExists(".git") Then
     WshShell.Run "cmd /c git init && git remote add origin https://github.com/katt-dev/Katt-Music.git && git branch -M main", 0, True
 End If
 
+' Back up .env before resetting
+If fso.FileExists(".env") Then
+    fso.CopyFile ".env", ".env.backup", True
+End If
+
 WshShell.Run "cmd /c git fetch origin main && git reset --hard origin/main", 0, True
+
+' Restore .env after resetting
+If fso.FileExists(".env.backup") Then
+    fso.CopyFile ".env.backup", ".env", True
+    fso.DeleteFile ".env.backup"
+End If
 
 WshShell.Run "cmd /c python app.py", 0, False
 
