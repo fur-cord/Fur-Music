@@ -510,6 +510,46 @@ input[type=range]::-moz-range-thumb {
     .btn-play svg { width: 42px; height: 42px; }
 }
 
+.import-dropdown {
+    position: relative;
+}
+
+.import-source-panel {
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 0;
+    min-width: 180px;
+    padding: 8px;
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+    z-index: 10;
+}
+
+.import-source-option {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid transparent;
+    color: white;
+    padding: 10px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    font-family: 'Inter', sans-serif;
+    font-size: 0.85rem;
+    transition: 0.2s ease;
+}
+.import-source-option:hover {
+    background: rgba(255,255,255,0.09);
+    border-color: rgba(255,255,255,0.14);
+}
+.import-source-option svg { flex-shrink: 0; }
+.import-source-option:not(.import-source-spotify) svg { color: #ff4444; }
+
+.spotify-icon-dot { fill: #1DB954; }
+
 .settings-dropdown {
     position: relative;
 }
@@ -649,6 +689,76 @@ body.video-mode-active .video-mode-panel {
 
 @keyframes vm-spin {
     to { transform: rotate(360deg); }
+}
+
+.spotify-import-progress {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.spotify-import-progress-row {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.spotify-import-progress-text {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+#spotify-import-headline {
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.spotify-import-current {
+    font-size: 0.8rem;
+    color: rgba(255,255,255,0.6);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.spotify-import-error {
+    font-size: 0.85rem;
+    color: #ff8a8a;
+    line-height: 1.4;
+}
+
+.spotify-import-failed {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.spotify-import-failed-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: rgba(255,255,255,0.55);
+}
+
+.spotify-import-failed-list {
+    max-height: 130px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.spotify-import-failed-item {
+    font-size: 0.82rem;
+    color: rgba(255,255,255,0.75);
+    background: rgba(255,255,255,0.05);
+    border-radius: 8px;
+    padding: 6px 10px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .vm-player-state {
