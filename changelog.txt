@@ -1,5 +1,3 @@
 V1.4.6
-+ Added branding logo
-+ Fixed auto-updates
-+ Pause and play button being stuck on wrong state
++ Added spotify support
 Made with 💜 by Fur-Cord
