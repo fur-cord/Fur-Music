@@ -28,8 +28,15 @@ if not exist .git (
 )
 
 echo Checking for updates...
+
+:: Back up .env before resetting
+if exist .env copy .env .env.backup >nul
+
 git fetch origin main
 git reset --hard origin/main
+
+:: Restore .env after resetting
+if exist .env.backup move /y .env.backup .env >nul
 echo.
 
 echo Launching browser in 3 seconds...
