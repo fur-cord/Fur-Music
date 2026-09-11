@@ -134,6 +134,12 @@ def save_spotify_map():
         json.dump(spotify_map, f, indent=4)
 
 
+def is_soundcloud_url(url):
+    if not url or not isinstance(url, str):
+        return False
+    return 'soundcloud.com' in url.lower()
+
+
 def is_in_library(vid):
     with library_lock:
         return any(item.get('id') == vid for item in library_data)
@@ -203,8 +209,169 @@ def download_youtube_track(vid):
     }
 
 
+def try_download_soundcloud_video_from_youtube(track_id, title, artist):
+    """Best-effort: search YouTube for a matching SoundCloud title/artist
+    and derive a background mp4 sidecar for the app's video mode route.
+    Returns True if a file named <track_id>_video.mp4 is produced."""
+    query = f"{artist} - {title}" if artist else title
+    if not query:
+        return False
+
+    search_opts = {
+        'extract_flat': True,
+        'quiet': True,
+        'no_warnings': True,
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(search_opts) as ydl_search:
+            search_info = ydl_search.extract_info(f'ytsearch1:{query}', download=False)
+            entries = search_info.get('entries') or []
+            if not entries:
+                return False
+            yt_id = entries[0].get('id')
+            if not yt_id:
+                return False
+    except Exception as e:
+        print(f"YouTube fallback search skipped for SoundCloud track '{title}': {e}")
+        return False
+
+    video_dl_opts = {
+        'format': 'bestvideo[ext=mp4][height<=720]/best[ext=mp4]/best',
+        'outtmpl': os.path.join(CACHE_DIR, f'{track_id}_video.%(ext)s'),
+        'merge_output_format': 'mp4',
+        'quiet': True,
+        'no_warnings': True,
+        'noplaylist': True,
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(video_dl_opts) as ydl_vid:
+            ydl_vid.extract_info(yt_id, download=True)
+        video_path = os.path.join(CACHE_DIR, f'{track_id}_video.mp4')
+        return os.path.exists(video_path)
+    except Exception as e:
+        print(f"YouTube fall-back video fetch skipped for SoundCloud track '{title}': {e}")
+        return False
+
+
+def download_soundcloud_track(track_url, track_id):
+    """Download a single SoundCloud track URL and shape the metadata into the
+    app's normal library item schema."""
+    dl_opts = {
+        'format': 'bestaudio/best',
+        'outtmpl': os.path.join(CACHE_DIR, f'{track_id}.%(ext)s'),
+        'postprocessors': [{
+            'key': 'FFmpegExtractAudio',
+            'preferredcodec': 'mp3',
+            'preferredquality': '192',
+        }],
+        'quiet': True,
+        'no_warnings': True,
+        'noplaylist': True,
+    }
+
+    dl_info = None
+    try:
+        with yt_dlp.YoutubeDL(dl_opts) as ydl_dl:
+            dl_info = ydl_dl.extract_info(track_url, download=True)
+    except Exception as e:
+        print(f"Failed to download audio for {track_url}: {e}")
+        return None
+
+    title = dl_info.get('title') or 'Untitled SoundCloud track'
+    artist = dl_info.get('uploader') or ''
+    has_video = try_download_soundcloud_video_from_youtube(str(track_id), title, artist)
+
+    return {
+        'id': str(track_id),
+        'title': title,
+        'artist': artist,
+        'thumbnail': dl_info.get('thumbnail') or '',
+        'duration': dl_info.get('duration'),
+        'has_video': has_video,
+        'source': 'soundcloud'
+    }
+
+
+def sync_soundcloud_url_task(soundcloud_url):
+    global is_syncing
+    is_syncing = True
+    print(f"Fetching SoundCloud metadata from: {soundcloud_url}")
+
+    ydl_opts = {
+        'extract_flat': False,
+        'quiet': True,
+        'no_warnings': True,
+        'skip_download': True,
+    }
+
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(soundcloud_url, download=False)
+    except Exception as e:
+        print(f"Error fetching SoundCloud URL: {e}")
+        is_syncing = False
+        return
+
+    entries = info.get('entries', []) if isinstance(info, dict) else []
+
+    if not entries and isinstance(info, dict):
+        track_id = info.get('id')
+        track_url = info.get('webpage_url') or info.get('url') or info.get('external_url') or soundcloud_url
+        if not track_id:
+            print("SoundCloud track metadata did not return an id.")
+            is_syncing = False
+            return
+
+        if is_in_library(str(track_id)):
+            is_syncing = False
+            print("SoundCloud track already in library.")
+            return
+
+        print(f"Downloading audio: {info.get('title')}...")
+        item_data = download_soundcloud_track(track_url, str(track_id))
+        if item_data:
+            add_to_library(item_data)
+        is_syncing = False
+        print("Playlist sync complete!")
+        return
+
+    if not isinstance(entries, list):
+        entries = []
+
+    print(f"Found {len(entries)} SoundCloud tracks. Starting background download...")
+
+    for entry in entries:
+        if not entry or not isinstance(entry, dict):
+            continue
+
+        track_id = entry.get('id')
+        if not track_id or is_in_library(str(track_id)):
+            continue
+
+        track_url = entry.get('webpage_url') or entry.get('url') or entry.get('external_url')
+        if not track_url:
+            print(f"Skipping SoundCloud item without a track URL: {entry.get('title')}")
+            continue
+
+        print(f"Downloading audio: {entry.get('title')}...")
+        item_data = download_soundcloud_track(track_url, str(track_id))
+        if not item_data:
+            continue
+
+        add_to_library(item_data)
+
+    is_syncing = False
+    print("Playlist sync complete!")
+
+
 def sync_playlist_task(playlist_url):
     global is_syncing
+    if is_soundcloud_url(playlist_url):
+        sync_soundcloud_url_task(playlist_url)
+        return
+
     is_syncing = True
     print(f"Fetching playlist metadata from: {playlist_url}")
 
