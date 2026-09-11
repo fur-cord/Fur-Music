@@ -158,11 +158,6 @@ def add_to_library(item_data):
 
 
 def download_youtube_track(vid):
-    """Downloads (audio + best-effort muted video) for a single YouTube
-    video ID using the existing yt-dlp pipeline, and returns the resulting
-    library item dict WITHOUT adding it to the library. Returns None if the
-    audio download fails. Shared by the YouTube playlist importer and the
-    Spotify importer so both feed the exact same local cache."""
     dl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': os.path.join(CACHE_DIR, f'{vid}.%(ext)s'),
@@ -210,9 +205,6 @@ def download_youtube_track(vid):
 
 
 def try_download_soundcloud_video_from_youtube(track_id, title, artist):
-    """Best-effort: search YouTube for a matching SoundCloud title/artist
-    and derive a background mp4 sidecar for the app's video mode route.
-    Returns True if a file named <track_id>_video.mp4 is produced."""
     query = f"{artist} - {title}" if artist else title
     if not query:
         return False
@@ -256,8 +248,6 @@ def try_download_soundcloud_video_from_youtube(track_id, title, artist):
 
 
 def download_soundcloud_track(track_url, track_id):
-    """Download a single SoundCloud track URL and shape the metadata into the
-    app's normal library item schema."""
     dl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': os.path.join(CACHE_DIR, f'{track_id}.%(ext)s'),
