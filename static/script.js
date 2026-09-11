@@ -107,9 +107,19 @@ const iconRepeatOne = document.getElementById('icon-repeat-one');
 const btnShuffle = document.getElementById('btn-shuffle');
 
 const modal = document.getElementById('import-modal');
+const modalTitle = document.getElementById('import-modal-title');
+const modalDescription = document.getElementById('import-modal-description');
 const inputUrl = document.getElementById('import-url');
 const btnImportCancel = document.getElementById('btn-import-cancel');
 const btnImportSubmit = document.getElementById('btn-import-submit');
+
+const autoGuiColorsOff = document.getElementById('auto-gui-colors-off');
+const autoGuiColorsAuto = document.getElementById('auto-gui-colors-auto');
+const autoGuiColorsKey = 'katt_auto_gui_colors';
+const autoGuiFallbackDef = '#2f6f8e';
+const autoGuiRefreshMs = 7000;
+let autoGuiRefreshTimer = null;
+let autoGuiColorsEnabled = localStorage.getItem(autoGuiColorsKey) === 'auto';
 
 const rpcModal = document.getElementById('rpc-modal');
 const btnRpcOpen = document.getElementById('btn-rpc-open');
@@ -128,6 +138,18 @@ let rpcSettings = JSON.parse(localStorage.getItem('katt_rpc_settings')) || {
     showTime: true,
     showArt: true
 };
+
+function updateAutoGuiColorUI() {
+    const isAuto = autoGuiColorsEnabled;
+    if (autoGuiColorsOff) {
+        autoGuiColorsOff.classList.toggle('active', !isAuto);
+        autoGuiColorsOff.setAttribute('aria-pressed', String(!isAuto));
+    }
+    if (autoGuiColorsAuto) {
+        autoGuiColorsAuto.classList.toggle('active', isAuto);
+        autoGuiColorsAuto.setAttribute('aria-pressed', String(isAuto));
+    }
+}
 
 function initRPCUI() {
     rpcEnable.checked = rpcSettings.enabled;
@@ -210,6 +232,7 @@ async function init() {
         }
 
         initRPCUI();
+        updateAutoGuiColorUI();
 
         const res = await fetch('/api/library');
         library = await res.json();
@@ -231,6 +254,154 @@ async function init() {
     } catch (e) {
         console.error('Failed to load library:', e);
     }
+}
+
+function restoreDefaultGuiColors() {
+    const defaultGlassBg = 'rgba(24, 24, 26, 0.34)';
+    const defaultGlassBorder = 'rgba(255, 255, 255, 0.06)';
+    document.documentElement.style.setProperty('--glass-bg', defaultGlassBg);
+    document.documentElement.style.setProperty('--glass-border', defaultGlassBorder);
+    document.documentElement.style.setProperty('--main-gui-acrylic-bg', defaultGlassBg);
+    document.documentElement.style.setProperty('--main-gui-acrylic-border', defaultGlassBorder);
+}
+
+function hexToRgb(hex) {
+    const clean = hex.replace('#', '');
+    const bigint = parseInt(clean.length === 3 ? clean.split('').map(ch => ch + ch).join('') : clean, 16);
+    return {
+        r: (bigint >> 16) & 255,
+        g: (bigint >> 8) & 255,
+        b: bigint & 255
+    };
+}
+
+function rgbaFromHex(hex, alpha) {
+    const {r, g, b} = hexToRgb(hex);
+    return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function applyAutoGuiColors(colors) {
+    if (!colors || !colors.primary) {
+        restoreDefaultGuiColors();
+        return;
+    }
+    const primary = colors.primary;
+    const layerBg = rgbaFromHex(primary, 0.24);
+    const borderColor = rgbaFromHex(primary, 0.07);
+    document.documentElement.style.setProperty('--glass-bg', layerBg);
+    document.documentElement.style.setProperty('--glass-border', borderColor);
+    document.documentElement.style.setProperty('--main-gui-acrylic-bg', layerBg);
+    document.documentElement.style.setProperty('--main-gui-acrylic-border', borderColor);
+}
+
+function computeDominantFromImage(imageUrl) {
+    return new Promise((resolve) => {
+        try {
+            if (!imageUrl) {
+                resolve({primary: autoGuiFallbackDef});
+                return;
+            }
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+                try {
+                    const canvas = document.createElement('canvas');
+                    const size = 24;
+                    canvas.width = size;
+                    canvas.height = size;
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage(img, 0, 0, size, size);
+                    const data = ctx.getImageData(0, 0, size, size).data;
+                    let r = 0, g = 0, b = 0, count = 0;
+                    for (let i = 0; i < data.length; i += 16) {
+                        const alpha = data[i + 3];
+                        if (alpha < 96) continue;
+                        r += data[i]; g += data[i + 1]; b += data[i + 2]; count++;
+                    }
+                    if (count === 0) {
+                        resolve({primary: autoGuiFallbackDef});
+                        return;
+                    }
+                    r = Math.round(r / count);
+                    g = Math.round(g / count);
+                    b = Math.round(b / count);
+                    const hex = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+                    resolve({primary: hex});
+                } catch (e) {
+                    resolve({primary: autoGuiFallbackDef});
+                }
+            };
+            img.onerror = () => resolve({primary: autoGuiFallbackDef});
+            img.src = imageUrl;
+        } catch (e) {
+            resolve({primary: autoGuiFallbackDef});
+        }
+    });
+}
+
+async function computeDominantFromVideo(videoEl, fallbackImageUrl) {
+    try {
+        if (!videoEl || videoEl.readyState < 2 || !videoEl.videoWidth || !videoEl.videoHeight) {
+            return await computeDominantFromImage(fallbackImageUrl);
+        }
+
+        const canvas = document.createElement('canvas');
+        const size = 24;
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(videoEl, 0, 0, size, size);
+        const data = ctx.getImageData(0, 0, size, size).data;
+        let r = 0, g = 0, b = 0, count = 0;
+        for (let i = 0; i < data.length; i += 16) {
+            const alpha = data[i + 3];
+            if (alpha < 96) continue;
+            r += data[i]; g += data[i + 1]; b += data[i + 2]; count++;
+        }
+        if (count === 0) {
+            return await computeDominantFromImage(fallbackImageUrl);
+        }
+
+        r = Math.round(r / count);
+        g = Math.round(g / count);
+        b = Math.round(b / count);
+        const hex = '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('');
+        return {primary: hex};
+    } catch (e) {
+        return await computeDominantFromImage(fallbackImageUrl);
+    }
+}
+
+function stopAutoGuiColorRefresh() {
+    if (autoGuiRefreshTimer) {
+        clearInterval(autoGuiRefreshTimer);
+        autoGuiRefreshTimer = null;
+    }
+}
+
+function startAutoGuiColorRefresh() {
+    stopAutoGuiColorRefresh();
+    if (!autoGuiColorsEnabled) return;
+
+    autoGuiRefreshTimer = setInterval(async () => {
+        if (!autoGuiColorsEnabled || !library.length || !library[currentIndex]) return;
+        await applyAutoGuiColorsToCurrentSong();
+    }, autoGuiRefreshMs);
+}
+
+async function applyAutoGuiColorsToCurrentSong() {
+    if (!autoGuiColorsEnabled) {
+        restoreDefaultGuiColors();
+        stopAutoGuiColorRefresh();
+        return;
+    }
+    if (!library.length || !library[currentIndex]) return;
+
+    const song = library[currentIndex];
+    const fallbackImageUrl = song.thumbnail || '';
+    const colors = await computeDominantFromVideo(videoPlayer, fallbackImageUrl);
+    applyAutoGuiColors(colors);
+    startAutoGuiColorRefresh();
 }
 
 function loadSong(index, autoPlay = true) {
@@ -380,6 +551,25 @@ btnRepeat.addEventListener('click', () => {
     }
 });
 
+if (autoGuiColorsOff) {
+    autoGuiColorsOff.addEventListener('click', () => {
+        autoGuiColorsEnabled = false;
+        localStorage.setItem(autoGuiColorsKey, 'off');
+        updateAutoGuiColorUI();
+        restoreDefaultGuiColors();
+        stopAutoGuiColorRefresh();
+    });
+}
+
+if (autoGuiColorsAuto) {
+    autoGuiColorsAuto.addEventListener('click', () => {
+        autoGuiColorsEnabled = true;
+        localStorage.setItem(autoGuiColorsKey, 'auto');
+        updateAutoGuiColorUI();
+        applyAutoGuiColorsToCurrentSong();
+    });
+}
+
 document.getElementById('btn-play').addEventListener('click', togglePlay);
 document.getElementById('btn-next').addEventListener('click', nextSong);
 document.getElementById('btn-prev').addEventListener('click', prevSong);
@@ -434,6 +624,9 @@ function formatTime(seconds) {
 videoPlayer.addEventListener('loadeddata', () => {
     elVideoFallback.hidden = true;
     syncVideoPlayer(true);
+    if (autoGuiColorsEnabled) {
+        applyAutoGuiColorsToCurrentSong();
+    }
 });
 videoPlayer.addEventListener('error', () => {
     elVideoFallback.hidden = false;
@@ -515,10 +708,24 @@ setInterval(async () => {
 
 init();
 
+function openImportModal(source = 'youtube') {
+    if (!modal || !modalTitle || !modalDescription || !inputUrl) return;
+
+    const isSoundCloud = source === 'soundcloud';
+    modalTitle.textContent = isSoundCloud ? 'Import SoundCloud Playlist' : 'Import YouTube Playlist';
+    modalDescription.textContent = isSoundCloud
+        ? 'Paste a public or unlisted SoundCloud playlist URL below. Playback will begin as soon as the first track finishes downloading.'
+        : 'Paste a public or unlisted playlist URL below. Playback will begin as soon as the first track finishes downloading.';
+    inputUrl.placeholder = isSoundCloud ? 'https://soundcloud.com/artist/sets/playlist' : 'https://youtube.com/playlist?list=...';
+    inputUrl.value = '';
+    modal.style.display = 'flex';
+}
+
 (function initImportSourceDropdown() {
     const btnImportOpen = document.getElementById('btn-import-open');
     const sourcePanel = document.getElementById('import-source-panel');
     const btnSourceYoutube = document.getElementById('btn-import-source-youtube');
+    const btnSourceSoundCloud = document.getElementById('btn-import-source-soundcloud');
     const btnSourceSpotify = document.getElementById('btn-import-source-spotify');
     if (!btnImportOpen || !sourcePanel) return;
 
@@ -547,7 +754,14 @@ init();
     if (btnSourceYoutube) {
         btnSourceYoutube.addEventListener('click', () => {
             closePanel();
-            if (modal) modal.style.display = 'flex';
+            openImportModal('youtube');
+        });
+    }
+
+    if (btnSourceSoundCloud) {
+        btnSourceSoundCloud.addEventListener('click', () => {
+            closePanel();
+            openImportModal('soundcloud');
         });
     }
 
